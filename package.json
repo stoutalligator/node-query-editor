@@ -1,7 +1,7 @@
 {
-  "name": "node-extract-app",
+  "name": "node-query-editor",
   "version": "0.1.0",
-  "description": "XML/JSON query workbench — XPath/JSONPath SQL-like editor for large files",
+  "description": "NXQL query editor for large XML files",
   "main": "dist/main.js",
   "scripts": {
     "compile": "node esbuild.js",
@@ -24,8 +24,8 @@
     "monaco-editor": "^0.55.1"
   },
   "build": {
-    "appId": "com.stout-alligator.node-extract-app",
-    "productName": "Node Extract",
+    "appId": "com.stout-alligator.node-query-editor",
+    "productName": "Node Query Editor",
     "directories": {
       "output": "release"
     },
