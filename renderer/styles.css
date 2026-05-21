@@ -1,0 +1,78 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:         #1e1e1e;
+  --bg2:        #252526;
+  --bg3:        #2d2d30;
+  --border:     #3e3e42;
+  --accent:     #0e639c;
+  --accent-hover: #1177bb;
+  --text:       #cccccc;
+  --text-dim:   #858585;
+  --text-bright:#ffffff;
+  --error:      #f44747;
+  --success:    #4ec9b0;
+  --radius:     4px;
+}
+
+html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; }
+
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ── Toolbar ── */
+#toolbar { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 6px 10px; display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+
+#file-bar { display: flex; align-items: center; gap: 8px; }
+#file-path { flex: 1; background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 4px 8px; border-radius: var(--radius); font-size: 12px; font-family: 'Consolas', monospace; outline: none; }
+#file-path:focus { border-color: var(--accent); }
+#file-status { font-size: 11px; color: var(--text-dim); white-space: nowrap; min-width: 120px; }
+
+#query-bar { display: flex; align-items: center; gap: 8px; }
+#limit-wrap { display: flex; align-items: center; gap: 4px; color: var(--text-dim); font-size: 12px; }
+#run-limit { background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 3px 6px; border-radius: var(--radius); font-size: 12px; cursor: pointer; }
+#result-badge { font-size: 12px; color: var(--text-dim); margin-left: 8px; }
+
+/* ── Buttons ── */
+button { border: none; border-radius: var(--radius); padding: 5px 12px; font-size: 12px; cursor: pointer; transition: background 0.1s; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary  { background: var(--accent); color: var(--text-bright); }
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+.btn-secondary { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover:not(:disabled) { background: var(--border); }
+
+/* ── Main pane ── */
+#main-pane { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Editor pane ── */
+#editor-pane { display: flex; flex-direction: column; width: 420px; min-width: 240px; flex-shrink: 0; border-right: 1px solid var(--border); }
+#monaco-container { flex: 1; overflow: hidden; }
+#error-bar { background: #5a1d1d; color: var(--error); padding: 6px 10px; font-size: 12px; font-family: 'Consolas', monospace; white-space: pre-wrap; border-top: 1px solid var(--error); }
+#error-bar.hidden { display: none; }
+
+/* ── Splitter ── */
+#splitter { width: 4px; background: var(--border); cursor: col-resize; flex-shrink: 0; }
+#splitter:hover, #splitter.dragging { background: var(--accent); }
+
+/* ── Results pane ── */
+#results-pane { flex: 1; overflow: hidden; position: relative; }
+#empty-state { display: flex; align-items: center; justify-content: center; height: 100%; padding: 40px; }
+#empty-content { max-width: 700px; }
+#empty-content h2 { color: var(--text-bright); margin-bottom: 12px; }
+#empty-content p  { color: var(--text-dim); margin-bottom: 20px; }
+#empty-content h3 { color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+pre.sample { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; font-size: 12px; font-family: 'Consolas', monospace; color: var(--text); margin-bottom: 12px; overflow-x: auto; white-space: pre; cursor: pointer; }
+pre.sample:hover { border-color: var(--accent); }
+
+kbd { background: var(--bg3); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px; font-size: 11px; font-family: 'Consolas', monospace; }
+
+/* ── AG Grid overrides (dark theme) ── */
+.ag-theme-alpine-dark {
+  --ag-background-color: #1e1e1e;
+  --ag-odd-row-background-color: #252526;
+  --ag-header-background-color: #2d2d30;
+  --ag-border-color: #3e3e42;
+  --ag-row-hover-color: #2a2d2e;
+  --ag-selected-row-background-color: #094771;
+  --ag-font-size: 12px;
+  --ag-font-family: 'Consolas', 'Courier New', monospace;
+}

@@ -1,0 +1,94 @@
+// ── Query plan types ──────────────────────────────────────────────────────────
+
+export type WhereOp = '=' | '!=' | '>' | '<' | '>=' | '<=' | 'IN' | 'NOT IN';
+
+export interface WhereClause {
+  attr: string;
+  op: WhereOp;
+  value: string | string[];
+}
+
+export interface SelectExpr {
+  alias: string;        // which EXTRACT alias (e.g. "rd")
+  attr: string;         // attribute name, or '*' for all
+  as: string | null;    // optional rename
+}
+
+export interface ExtractStep {
+  alias: string;        // e.g. "cg", "cp", "rcv"
+  path: string;         // e.g. "//*/ClaimGroupBO" or "cg//ClaimPeriodBO"
+  where: WhereClause | null;
+}
+
+export interface ExtractQuery {
+  kind: 'extract';
+  steps: ExtractStep[];
+  select: SelectExpr[];
+  limit: number | null;
+}
+
+export interface CteDefinition {
+  name: string;
+  query: ExtractQuery;
+}
+
+export type JoinType = 'INNER' | 'LEFT';
+
+export interface JoinClause {
+  type: JoinType;
+  table: string;        // CTE name
+  alias: string;
+  on: Array<{ left: string; right: string }>; // column pairs
+}
+
+export interface FinalSelect {
+  columns: Array<{ expr: string; as: string | null }>;
+  from: string;         // CTE name
+  fromAlias: string;
+  joins: JoinClause[];
+  limit: number | null;
+}
+
+export interface CteQuery {
+  kind: 'cte';
+  ctes: CteDefinition[];
+  final: FinalSelect;
+}
+
+export interface XPathQuery {
+  kind: 'xpath';
+  expression: string;
+}
+
+export type ParsedQuery = ExtractQuery | CteQuery | XPathQuery;
+
+// ── Result types ──────────────────────────────────────────────────────────────
+
+/** A flat row: column name → string value */
+export type ResultRow = Record<string, string>;
+
+export interface QueryResult {
+  columns: string[];
+  rows: ResultRow[];
+  totalRows: number;       // before limit
+  truncated: boolean;
+}
+
+export interface QueryError {
+  message: string;
+  line?: number;
+  col?: number;
+}
+
+// ── Worker message types ──────────────────────────────────────────────────────
+
+export type WorkerInMessage =
+  | { type: 'loadFile'; filePath: string }
+  | { type: 'runQuery'; queryText: string; limit: number | null };
+
+export type WorkerOutMessage =
+  | { type: 'fileLoaded'; filePath: string; sizeBytes: number }
+  | { type: 'fileError'; message: string }
+  | { type: 'queryResult'; result: QueryResult }
+  | { type: 'queryError'; error: QueryError }
+  | { type: 'progress'; message: string };
