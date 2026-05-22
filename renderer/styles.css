@@ -41,16 +41,16 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-secondary:hover:not(:disabled) { background: var(--border); }
 
 /* ── Main pane ── */
-#main-pane { display: flex; flex: 1; overflow: hidden; }
+#main-pane { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
 
 /* ── Editor pane ── */
-#editor-pane { display: flex; flex-direction: column; width: 420px; min-width: 240px; flex-shrink: 0; border-right: 1px solid var(--border); }
+#editor-pane { display: flex; flex-direction: column; height: 260px; min-height: 80px; flex-shrink: 0; border-bottom: 1px solid var(--border); }
 #monaco-container { flex: 1; overflow: hidden; }
 #error-bar { background: #5a1d1d; color: var(--error); padding: 6px 10px; font-size: 12px; font-family: 'Consolas', monospace; white-space: pre-wrap; border-top: 1px solid var(--error); }
 #error-bar.hidden { display: none; }
 
 /* ── Splitter ── */
-#splitter { width: 4px; background: var(--border); cursor: col-resize; flex-shrink: 0; }
+#splitter { height: 4px; background: var(--border); cursor: row-resize; flex-shrink: 0; }
 #splitter:hover, #splitter.dragging { background: var(--accent); }
 
 /* ── Results pane ── */
@@ -70,6 +70,8 @@ kbd { background: var(--bg3); border: 1px solid var(--border); border-radius: 3p
   --ag-background-color: #1e1e1e;
   --ag-odd-row-background-color: #252526;
   --ag-header-background-color: #2d2d30;
+  --ag-foreground-color: #cccccc;
+  --ag-header-foreground-color: #ffffff;
   --ag-border-color: #3e3e42;
   --ag-row-hover-color: #2a2d2e;
   --ag-selected-row-background-color: #094771;

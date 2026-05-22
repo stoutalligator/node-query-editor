@@ -19,8 +19,7 @@
     }));
 
     if (gridApi) {
-      gridApi.setGridOption('columnDefs', colDefs);
-      gridApi.setGridOption('rowData', rows);
+      gridApi.updateGridOptions({ columnDefs: colDefs, rowData: rows });
       return;
     }
 
@@ -31,7 +30,8 @@
       rowSelection: 'multiple',
       enableCellTextSelection: true,
       suppressMovableColumns: false,
-      animateRows: false,          // disable for performance with large sets
+      suppressFieldDotNotation: true,  // column names like "root.runId" are literal keys, not nested paths
+      animateRows: false,              // disable for performance with large sets
       rowBuffer: 20,
     };
 
@@ -236,22 +236,22 @@
   const splitter = document.getElementById('splitter');
   const editorPane = document.getElementById('editor-pane');
   let dragging = false;
-  let startX = 0;
-  let startW = 0;
+  let startY = 0;
+  let startH = 0;
 
   splitter.addEventListener('mousedown', (e) => {
     dragging = true;
-    startX = e.clientX;
-    startW = editorPane.offsetWidth;
+    startY = e.clientY;
+    startH = editorPane.offsetHeight;
     splitter.classList.add('dragging');
     e.preventDefault();
   });
 
   document.addEventListener('mousemove', (e) => {
     if (!dragging) return;
-    const delta = e.clientX - startX;
-    const newW = Math.max(200, Math.min(startW + delta, window.innerWidth - 400));
-    editorPane.style.width = newW + 'px';
+    const delta = e.clientY - startY;
+    const newH = Math.max(80, Math.min(startH + delta, window.innerHeight - 200));
+    editorPane.style.height = newH + 'px';
   });
 
   document.addEventListener('mouseup', () => {

@@ -1,6 +1,6 @@
 import type {
   ParsedQuery, ExtractQuery, CteQuery,
-  ExtractStep, SelectExpr, WhereClause,
+  ExtractStep, SelectExpr, LookupExpr, WhereClause,
   ResultRow, QueryResult,
 } from './types';
 import { parseDocument } from 'htmlparser2';
@@ -43,7 +43,7 @@ function runExtract(q: ExtractQuery, doc: Document, limitOverride: number | null
   const rows: ResultRow[] = [];
   const ancestorAttrs: Record<string, Record<string, string>> = {};
 
-  descend(q.steps, 0, doc as any, ancestorAttrs, q.select, rows, limit);
+  descend(q.steps, 0, doc as any, ancestorAttrs, {}, q.select, rows, limit);
 
   const columns = deriveColumns(q.select, rows);
   return { columns, rows, totalRows: rows.length, truncated: false };
@@ -54,6 +54,7 @@ function descend(
   stepIdx: number,
   context: AnyNode,
   ancestorAttrs: Record<string, Record<string, string>>,
+  ancestorNodes: Record<string, AnyNode>,
   select: SelectExpr[],
   out: ResultRow[],
   limit: number | null,
@@ -61,7 +62,10 @@ function descend(
   if (limit !== null && out.length >= limit) return;
 
   const step = steps[stepIdx];
-  const matched = matchPath(step.path, context);
+  // If the path starts with a known alias (e.g. "pg_scen//PropertyGroupBO"),
+  // search within that ancestor node rather than the immediately previous one.
+  const searchContext = resolvePathContext(step.path, ancestorNodes, context);
+  const matched = matchPath(step.path, searchContext);
 
   for (const el of matched) {
     if (limit !== null && out.length >= limit) return;
@@ -69,14 +73,24 @@ function descend(
 
     const attrs = getAttrs(el);
     const nextAncestors = { ...ancestorAttrs, [step.alias]: attrs };
+    const nextNodes     = { ...ancestorNodes,  [step.alias]: el };
 
     if (stepIdx === steps.length - 1) {
-      // Leaf — emit row
-      out.push(buildRow(select, nextAncestors, el));
+      out.push(buildRow(select, nextAncestors, nextNodes, el));
     } else {
-      descend(steps, stepIdx + 1, el, nextAncestors, select, out, limit);
+      descend(steps, stepIdx + 1, el, nextAncestors, nextNodes, select, out, limit);
     }
   }
+}
+
+function resolvePathContext(
+  path: string,
+  ancestorNodes: Record<string, AnyNode>,
+  defaultContext: AnyNode,
+): AnyNode {
+  const m = path.match(/^([a-zA-Z_]\w*)\//);
+  if (m && ancestorNodes[m[1]]) return ancestorNodes[m[1]];
+  return defaultContext;
 }
 
 // ── Path matching ─────────────────────────────────────────────────────────────
@@ -116,7 +130,7 @@ function matchPath(path: string, context: AnyNode): Element[] {
 
 function findDescendants(node: AnyNode, tagName: string | null): Element[] {
   const results: Element[] = [];
-  const stack: AnyNode[] = getChildren(node);
+  const stack: AnyNode[] = getChildren(node).slice(); // copy — never mutate the node's own children array
   while (stack.length) {
     const cur = stack.pop()!;
     if (isTag(cur)) {
@@ -159,33 +173,52 @@ function getAttrs(el: Element): Record<string, string> {
 }
 
 function buildRow(
-  select: SelectExpr[],
+  select: Array<SelectExpr | LookupExpr>,
   ancestorAttrs: Record<string, Record<string, string>>,
+  ancestorNodes: Record<string, AnyNode>,
   leafEl: Element,
 ): ResultRow {
   const row: ResultRow = {};
   for (const expr of select) {
-    const attrs = ancestorAttrs[expr.alias];
+    if ((expr as LookupExpr).kind === 'lookup') {
+      const lk = expr as LookupExpr;
+      const searchCtx = resolvePathContext(lk.path, ancestorNodes, leafEl);
+      const allMatches = matchPath(lk.path, searchCtx);
+      const matches = allMatches.filter(el => passesWhere(el, lk.where));
+      const col = lk.as ?? `${lk.path}.${lk.returnAttr}`;
+      row[col] = matches.length > 0 ? (matches[0].attribs[lk.returnAttr] ?? '') : '';
+      continue;
+    }
+
+    const fe = expr as SelectExpr;
+    const attrs = ancestorAttrs[fe.alias];
     if (!attrs) continue;
 
-    if (expr.attr === '*') {
+    if (fe.attr === '*') {
       for (const [k, v] of Object.entries(attrs)) {
-        const col = expr.as ?? `${expr.alias}.${k}`;
+        const col = fe.as ?? `${fe.alias}.${k}`;
         row[col] = v;
       }
     } else {
-      const col = expr.as ?? `${expr.alias}.${expr.attr}`;
-      row[col] = attrs[expr.attr] ?? '';
+      const col = fe.as ?? `${fe.alias}.${fe.attr}`;
+      row[col] = attrs[fe.attr] ?? '';
     }
   }
   return row;
 }
 
-function deriveColumns(select: SelectExpr[], rows: ResultRow[]): string[] {
+function deriveColumns(select: Array<SelectExpr | LookupExpr>, rows: ResultRow[]): string[] {
   // For wildcard selects, column set is determined from actual rows
-  const hasWildcard = select.some(e => e.attr === '*');
+  const hasWildcard = select.some(e => (e as SelectExpr).attr === '*');
   if (!hasWildcard) {
-    return select.map(e => e.as ?? `${e.alias}.${e.attr}`);
+    return select.map(e => {
+      if ((e as LookupExpr).kind === 'lookup') {
+        const lk = e as LookupExpr;
+        return lk.as ?? `${lk.path}.${lk.returnAttr}`;
+      }
+      const fe = e as SelectExpr;
+      return fe.as ?? `${fe.alias}.${fe.attr}`;
+    });
   }
   // Collect all columns in insertion order
   const seen = new Set<string>();

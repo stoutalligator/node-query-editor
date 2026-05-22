@@ -14,6 +14,17 @@ export interface SelectExpr {
   as: string | null;    // optional rename
 }
 
+/** Inline lookup: find a descendant from an ancestor alias, return one attribute.
+ *  SELECT pg_scen//PropertyBO WHERE @propertyType = 'ScenarioId' RETURN @integerValue AS scenarioId
+ */
+export interface LookupExpr {
+  kind: 'lookup';
+  path: string;           // e.g. "pg_scen//PropertyBO"
+  where: WhereClause | null;
+  returnAttr: string;     // attribute to pull from the first matched node
+  as: string | null;
+}
+
 export interface ExtractStep {
   alias: string;        // e.g. "cg", "cp", "rcv"
   path: string;         // e.g. "//*/ClaimGroupBO" or "cg//ClaimPeriodBO"
@@ -23,7 +34,7 @@ export interface ExtractStep {
 export interface ExtractQuery {
   kind: 'extract';
   steps: ExtractStep[];
-  select: SelectExpr[];
+  select: Array<SelectExpr | LookupExpr>;
   limit: number | null;
 }
 

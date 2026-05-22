@@ -1,6 +1,6 @@
 import type {
   ParsedQuery, ExtractQuery, CteQuery, XPathQuery,
-  ExtractStep, SelectExpr, WhereClause, WhereOp,
+  ExtractStep, SelectExpr, LookupExpr, WhereClause, WhereOp,
   CteDefinition, FinalSelect, JoinClause, JoinType,
 } from './types';
 
@@ -22,7 +22,7 @@ type TokKind =
 
 const KEYWORDS = new Set([
   'EXTRACT','ROOT','INTO','WHERE','SELECT','AS','WITH','FROM','JOIN','LEFT',
-  'INNER','ON','AND','IN','NOT','XPATH','LIMIT','ORDER','BY','ASC','DESC',
+  'INNER','ON','AND','IN','NOT','XPATH','LIMIT','ORDER','BY','ASC','DESC','RETURN',
 ]);
 
 interface Token { kind: TokKind; value: string; pos: number; }
@@ -257,14 +257,25 @@ function parseInList(ts: TokenStream): string[] {
   return values;
 }
 
-function parseSelectExprs(ts: TokenStream): SelectExpr[] {
-  const exprs: SelectExpr[] = [];
+function parseSelectExprs(ts: TokenStream): Array<SelectExpr | LookupExpr> {
+  const exprs: Array<SelectExpr | LookupExpr> = [];
 
   while (!ts.eof() && !ts.peekKw('LIMIT') && !ts.peekKw('ORDER')) {
     const t = ts.next();
 
+    // Inline lookup: alias//Tag [WHERE @attr OP value] RETURN @attr AS name
+    if (t.kind === 'PATH') {
+      const where = ts.peekKw('WHERE') ? parseWhere(ts) : null;
+      ts.expectKw('RETURN');
+      const retTok = ts.next();
+      if (retTok.kind !== 'ATTR') throw new SyntaxError(`Expected @attribute after RETURN, got '${retTok.value}'`);
+      const returnAttr = retTok.value.slice(1);
+      let as: string | null = null;
+      if (ts.peekKw('AS')) { ts.next(); as = ts.expectIdent(); }
+      exprs.push({ kind: 'lookup', path: t.value, where, returnAttr, as });
+
     // alias.* or alias.@attr or alias.attrName
-    if (t.kind === 'IDENT' || t.kind === 'KW') {
+    } else if (t.kind === 'IDENT' || t.kind === 'KW') {
       const alias = t.value;
       const dot = ts.next();
       if (dot.kind !== 'DOT') throw new SyntaxError(`Expected '.' after alias '${alias}', got '${dot.value}'`);
