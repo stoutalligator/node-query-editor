@@ -59,7 +59,7 @@ function handleRunQuery(queryText: string, limit: number | null): void {
     }
   }
 
-  if (sourcePaths.length === 0 && !hasDocument()) {
+  if (sourcePaths.length === 0 && !hasDocument() && !hasDirSource(parsed)) {
     send({ type: 'queryError', error: { message: "No file loaded. Load a file or add FROM 'path/to/file.xml' to your EXTRACT." } });
     return;
   }
@@ -138,4 +138,10 @@ function getQuerySourcePaths(parsed: ParsedQuery): string[] {
   if (parsed.kind === 'extract') return parsed.source?.kind === 'file' ? [parsed.source.path] : [];
   if (parsed.kind === 'cte') return parsed.ctes.map(c => c.query.source).filter((s): s is { kind: 'file'; path: string } => s?.kind === 'file').map(s => s.path);
   return [];
+}
+
+function hasDirSource(parsed: ParsedQuery): boolean {
+  if (parsed.kind === 'extract') return parsed.source?.kind === 'dir';
+  if (parsed.kind === 'cte') return parsed.ctes.some(c => c.query.source?.kind === 'dir');
+  return false;
 }

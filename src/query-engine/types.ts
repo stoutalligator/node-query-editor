@@ -62,6 +62,8 @@ export interface FinalSelect {
   from: string;         // CTE name
   fromAlias: string;
   joins: JoinClause[];
+  groupBy: string[] | null;
+  having: { op: WhereOp; value: number } | null;
   limit: number | null;
 }
 

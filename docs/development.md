@@ -56,9 +56,12 @@ esbuild.js          Build script (compiles src/ → dist/)
    |<── onWorkerMessage(fileLoaded) ──  |<── parentPort.post ───   |
    |─── api.runQuery(nxql, limit) ───>  |─── postMessage ──────>  |
    |<── onWorkerMessage(queryResult) ─  |<── parentPort.post ───   |
+   |─── api.saveQuery(name, text) ───>  | writes saved-queries.json|
+   |─── api.loadQueries() ───────────>  | reads saved-queries.json |
+   |─── api.deleteQuery(id) ─────────>  | writes saved-queries.json|
 ```
 
-The renderer never touches the filesystem. All I/O happens in the worker thread. The main process only coordinates IPC.
+The renderer never touches the filesystem directly. Query execution and XML I/O happen in the worker thread. Saved-query persistence is handled by the main process via `app.getPath('userData')/saved-queries.json`.
 
 ## Branch strategy
 
@@ -110,3 +113,5 @@ The NSIS installer is set to `allowToChangeInstallationDirectory: false` by defa
 4. Implement evaluation in [src/query-engine/evaluator.ts](../src/query-engine/evaluator.ts)
 5. Add the keyword to the Monaco tokenizer `keywords` array in [renderer/main.js](../renderer/main.js)
 6. Update [docs/nxql-language.md](nxql-language.md)
+
+Recent additions that follow this pattern: `GROUP`, `HAVING`, `COUNT` (added for `GROUP BY` / `HAVING COUNT(*)` support).

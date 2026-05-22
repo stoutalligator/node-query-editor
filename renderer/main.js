@@ -274,6 +274,84 @@
     }
   });
 
+  // ── Saved Queries ─────────────────────────────────────────────────────────
+  let savedQueries = [];
+
+  function escHtml(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function renderSavedList() {
+    const list = document.getElementById('saved-list');
+    if (savedQueries.length === 0) {
+      list.innerHTML = '<div class="saved-empty">No saved queries yet.</div>';
+      return;
+    }
+    list.innerHTML = savedQueries.map(q => `
+      <div class="saved-item" data-id="${escHtml(q.id)}">
+        <div class="saved-item-name">${escHtml(q.name)}</div>
+        <div class="saved-item-preview">${escHtml(q.query.slice(0, 80))}&hellip;</div>
+        <div class="saved-item-actions">
+          <button class="btn-ghost saved-load-btn">Load</button>
+          <button class="btn-ghost saved-del-btn">&#x2715;</button>
+        </div>
+      </div>`).join('');
+  }
+
+  // Load saved queries on startup
+  window.api.loadQueries().then(list => { savedQueries = list; renderSavedList(); });
+
+  // Toggle panel open/close
+  document.getElementById('saved-queries-btn').addEventListener('click', () => {
+    document.getElementById('saved-panel').classList.toggle('hidden');
+  });
+  document.getElementById('saved-panel-close').addEventListener('click', () => {
+    document.getElementById('saved-panel').classList.add('hidden');
+  });
+
+  // Event delegation for load + delete
+  document.getElementById('saved-list').addEventListener('click', async (e) => {
+    const item = e.target.closest('.saved-item');
+    if (!item) return;
+    const id = item.dataset.id;
+    if (e.target.classList.contains('saved-load-btn')) {
+      const q = savedQueries.find(x => x.id === id);
+      if (q && editor) { editor.setValue(q.query); editor.focus(); }
+      document.getElementById('saved-panel').classList.add('hidden');
+    } else if (e.target.classList.contains('saved-del-btn')) {
+      savedQueries = await window.api.deleteQuery(id);
+      renderSavedList();
+    }
+  });
+
+  // Save current query
+  document.getElementById('save-query-btn').addEventListener('click', () => {
+    document.getElementById('save-query-btn').classList.add('hidden');
+    document.getElementById('save-name-form').classList.remove('hidden');
+    document.getElementById('save-name-input').value = '';
+    document.getElementById('save-name-input').focus();
+  });
+
+  async function commitSave() {
+    const name = document.getElementById('save-name-input').value.trim();
+    if (name && editor) {
+      savedQueries = await window.api.saveQuery(name, editor.getValue());
+      renderSavedList();
+    }
+    document.getElementById('save-name-form').classList.add('hidden');
+    document.getElementById('save-query-btn').classList.remove('hidden');
+  }
+
+  document.getElementById('save-name-ok').addEventListener('click', commitSave);
+  document.getElementById('save-name-cancel').addEventListener('click', () => {
+    document.getElementById('save-name-form').classList.add('hidden');
+    document.getElementById('save-query-btn').classList.remove('hidden');
+  });
+  document.getElementById('save-name-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter')  commitSave();
+    if (e.key === 'Escape') document.getElementById('save-name-cancel').click();
+  });
+
   // ── Auto-update banner ────────────────────────────────────────────────────
   if (window.api.onUpdateDownloaded) {
     window.api.onUpdateDownloaded((version) => {

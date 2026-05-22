@@ -12,5 +12,8 @@ contextBridge.exposeInMainWorld('api', {
   onUpdateDownloaded: (cb: (version: string) => void) => {
     ipcRenderer.on('update-downloaded', (_e, version) => cb(version));
   },
-  installUpdate: () => ipcRenderer.send('install-update'),
+  installUpdate:  () => ipcRenderer.send('install-update'),
+  loadQueries:    ()                          => ipcRenderer.invoke('load-queries'),
+  saveQuery:      (name: string, q: string)   => ipcRenderer.invoke('save-query', name, q),
+  deleteQuery:    (id: string)                => ipcRenderer.invoke('delete-query', id),
 });
