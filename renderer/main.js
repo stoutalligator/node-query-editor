@@ -86,7 +86,11 @@
         { token: 'operator',         foreground: 'd4d4d4' },
       ],
       colors: {
-        'editor.background': '#1e1e1e',
+        'editor.background': '#21222c',
+        'editor.lineHighlightBackground': '#2a2b36',
+        'editorGutter.background': '#1e1f29',
+        'editorLineNumber.foreground': '#44475a',
+        'editorLineNumber.activeForeground': '#8b949e',
       },
     });
 
@@ -95,11 +99,14 @@
       theme: 'nxql-dark',
       value: [
         '-- Write a query below. Press Ctrl+Enter to run.',
+        '-- Click any example in the panel below to load it, or use FROM to specify an XML file.',
         '',
         'EXTRACT',
-        '  ROOT  //RootElement         AS root',
-        '  INTO  root//ChildElement    AS child',
-        '  SELECT root.@id, child.*',
+        '  ROOT  //ObservationNetworkBO    AS net',
+        '  INTO  net//WeatherStationBO     AS stn',
+        '  INTO  stn//MeasurementBO        AS msr',
+        '  SELECT net.@region, stn.@stationId, msr.*',
+        'LIMIT 1000',
       ].join('\n'),
       minimap: { enabled: false },
       fontSize: 13,

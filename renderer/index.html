@@ -4,83 +4,218 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Node Extract</title>
-  <!-- AG Grid Community -->
   <script src="../node_modules/ag-grid-community/dist/ag-grid-community.min.js"></script>
-  <!-- Monaco Editor loader -->
   <script src="../node_modules/monaco-editor/min/vs/loader.js"></script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div id="app">
-    <!-- ── Toolbar ── -->
+    <div id="accent-bar"></div>
+
+    <!-- ── Toolbar (single row) ── -->
     <div id="toolbar">
-      <div id="file-bar">
-        <button id="browse-btn" class="btn-secondary">Open File</button>
-        <input id="file-path" type="text" placeholder="Paste file path and press Enter…" spellcheck="false" />
-        <span id="file-status"></span>
+      <button id="browse-btn" class="btn-secondary">Open File</button>
+      <input id="file-path" type="text" placeholder="Paste file path and press Enter…" spellcheck="false" />
+      <span id="file-status"></span>
+      <div class="toolbar-sep"></div>
+      <div id="limit-wrap">
+        <label for="run-limit">Limit</label>
+        <select id="run-limit">
+          <option value="1000">1 000</option>
+          <option value="10000">10 000</option>
+          <option value="50000">50 000</option>
+          <option value="0">None</option>
+        </select>
       </div>
-      <div id="query-bar">
-        <div id="limit-wrap">
-          <label for="run-limit">Limit</label>
-          <select id="run-limit">
-            <option value="1000">1 000</option>
-            <option value="10000">10 000</option>
-            <option value="50000">50 000</option>
-            <option value="0">None</option>
-          </select>
-        </div>
-        <button id="run-btn" class="btn-primary" disabled>&#9654; Run</button>
-        <button id="copy-csv-btn" class="btn-secondary" style="display:none">Copy CSV</button>
-        <button id="export-csv-btn" class="btn-secondary" style="display:none">Export CSV</button>
-        <span id="result-badge"></span>
-      </div>
+      <button id="run-btn" class="btn-primary" disabled>&#9654; Run</button>
+      <button id="copy-csv-btn" class="btn-secondary" style="display:none">Copy CSV</button>
+      <button id="export-csv-btn" class="btn-secondary" style="display:none">Export CSV</button>
+      <span id="result-badge"></span>
     </div>
 
     <!-- ── Main pane ── -->
     <div id="main-pane">
-      <!-- Editor -->
       <div id="editor-pane">
+        <div id="editor-header">
+          <span class="editor-title">Query Editor</span>
+          <span class="editor-hint"><kbd>Ctrl+Enter</kbd> to run</span>
+        </div>
         <div id="monaco-container"></div>
         <div id="error-bar" class="hidden"></div>
       </div>
-
-      <!-- Splitter -->
       <div id="splitter"></div>
-
-      <!-- Results -->
       <div id="results-pane">
+
         <div id="empty-state">
           <div id="empty-content">
-            <h2>Node Extract</h2>
-            <p>Open an XML file, write a query, press <kbd>Ctrl+Enter</kbd> to run.</p>
-            <h3>Example queries</h3>
-            <pre class="sample">EXTRACT
-  ROOT  //*/ClaimGroupBO         AS cg
-  INTO  cg//ClaimPeriodBO        AS cp
-  INTO  cp//RateDetailBO         AS rd
-  SELECT cg.@policyNumber, cp.@startDate, rd.*</pre>
-            <pre class="sample">WITH fire AS (
+
+            <div class="empty-header">
+              <h2 class="app-title">Node Extract</h2>
+              <p class="subtitle">NXQL &mdash; a SQL-like query language for XML files &mdash; press <kbd>Ctrl+Enter</kbd> to run</p>
+            </div>
+
+            <div class="empty-grid">
+
+              <!-- ── Syntax reference ── -->
+              <section class="ref-section">
+                <h3 class="section-title">Language Reference</h3>
+                <div class="ref-list">
+
+                  <div class="ref-row">
+                    <code class="ref-kw">EXTRACT</code>
+                    <span class="ref-desc">Start a query block</span>
+                  </div>
+                  <div class="ref-row">
+                    <code class="ref-kw">ROOT //Tag AS alias</code>
+                    <span class="ref-desc">Find all matching root elements in the document</span>
+                  </div>
+                  <div class="ref-row">
+                    <code class="ref-kw">INTO alias//Tag AS alias</code>
+                    <span class="ref-desc">Descend into descendants of the previous step</span>
+                  </div>
+                  <div class="ref-row">
+                    <code class="ref-kw orange">WHERE @attr = &lsquo;val&rsquo;</code>
+                    <span class="ref-desc">Filter a step &mdash; =&nbsp; !=&nbsp; &lt;&nbsp; &gt;&nbsp; IN&nbsp;(…)&nbsp; NOT&nbsp;IN&nbsp;(…)</span>
+                  </div>
+                  <div class="ref-row">
+                    <code class="ref-kw green">alias.@attr</code>
+                    <span class="ref-desc">Select a specific attribute</span>
+                  </div>
+                  <div class="ref-row">
+                    <code class="ref-kw green">alias.*</code>
+                    <span class="ref-desc">Select all attributes from a step</span>
+                  </div>
+                  <div class="ref-row">
+                    <code class="ref-kw green">alias//Tag WHERE … RETURN @attr AS col</code>
+                    <span class="ref-desc">Inline lookup — pull a side-branch value per row</span>
+                  </div>
+                  <div class="ref-row">
+                    <code class="ref-kw purple">FROM &lsquo;path/to/file.xml&rsquo;</code>
+                    <span class="ref-desc">Load and query a specific XML file inline</span>
+                  </div>
+                  <div class="ref-row">
+                    <code class="ref-kw purple">FROM DIR &lsquo;path/to/dir&rsquo;</code>
+                    <span class="ref-desc">Run against all *.xml in a directory; adds <em>_source</em> column</span>
+                  </div>
+                  <div class="ref-row">
+                    <code class="ref-kw purple">WITH name AS (EXTRACT …)</code>
+                    <span class="ref-desc">Named subquery (CTE) for multi-step logic</span>
+                  </div>
+                  <div class="ref-row">
+                    <code class="ref-kw purple">JOIN / LEFT JOIN … ON …</code>
+                    <span class="ref-desc">Join two CTEs on one or more column pairs</span>
+                  </div>
+                  <div class="ref-row">
+                    <code class="ref-kw">LIMIT n</code>
+                    <span class="ref-desc">Cap total rows returned</span>
+                  </div>
+                  <div class="ref-row">
+                    <code class="ref-kw dim">-- comment</code>
+                    <span class="ref-desc">Single-line comments are ignored</span>
+                  </div>
+
+                </div>
+              </section>
+
+              <!-- ── Examples ── -->
+              <section class="examples-section">
+                <h3 class="section-title">
+                  Example Queries
+                  <span class="click-hint">click to load</span>
+                </h3>
+
+                <div class="sample-wrap">
+                  <span class="sample-label">Basic</span>
+                  <pre class="sample">EXTRACT
+  ROOT  //ObservationNetworkBO    AS net
+  INTO  net//WeatherStationBO     AS stn
+  INTO  stn//ObservationPeriodBO  AS pd
+  INTO  pd//MeasurementBO         AS msr
+  SELECT net.@networkId, net.@region, stn.@stationId, pd.@startDate, msr.*
+LIMIT 500</pre>
+                </div>
+
+                <div class="sample-wrap">
+                  <span class="sample-label sample-label--blue">Inline source + lookups</span>
+                  <pre class="sample">-- Specify the XML file directly in the query.
+-- Use RETURN to pull side-branch property values per row.
+EXTRACT FROM 'C:/data/observations-2024.xml'
+  ROOT  //ObservationNetworkBO AS net
+  INTO  net//WeatherStationBO AS stn
+  INTO  stn//ObservationPeriodBO AS pd
+  INTO  pd//MeasurementGroupBO AS mg  WHERE @groupType = 'Atmospheric'
+  INTO  mg//MeasurementBO AS msr      WHERE @measurementType IN ('WindSpeed', 'Pressure')
+  SELECT
+    net.@networkId,
+    net.@region,
+    stn.@stationId,
+    stn.@stationType,
+    pd.@startDate,
+    pd.@endDate,
+    mg//PropertyBO WHERE @propertyType = 'StationClass'  RETURN @value        AS stationClass,
+    mg//PropertyBO WHERE @propertyType = 'CalibrationId' RETURN @integerValue AS calibrationId,
+    msr.*
+LIMIT 1000</pre>
+                </div>
+
+                <div class="sample-wrap">
+                  <span class="sample-label sample-label--purple">Multi-file directory scan</span>
+                  <pre class="sample">-- Run the same query against every *.xml in a folder.
+-- Results are unioned; a _source column shows which file each row came from.
+EXTRACT FROM DIR 'C:/data/archive/2024/'
+  ROOT  //ObservationNetworkBO AS net
+  INTO  net//WeatherStationBO AS stn
+  INTO  stn//ObservationPeriodBO AS pd
+  INTO  pd//MeasurementGroupBO AS mg
+  INTO  mg//MeasurementBO AS msr
+  SELECT
+    net.@networkId,
+    net.@region,
+    stn.@stationId,
+    stn.@stationType,
+    stn.@elevation,
+    pd.@startDate,
+    mg//PropertyBO WHERE @propertyType = 'StationClass' RETURN @value AS stationClass,
+    msr.*
+LIMIT 2000</pre>
+                </div>
+
+                <div class="sample-wrap">
+                  <span class="sample-label sample-label--green">CTE + JOIN &mdash; wind vs temperature</span>
+                  <pre class="sample">-- Join two filtered extracts side by side.
+WITH wind AS (
   EXTRACT
-    ROOT //*/ClaimGroupBO          AS cg
-    INTO cg//ClaimPeriodBO         AS cp
-    INTO cp//RateComponentVectorBO AS rcv WHERE @rateComponentType = 'FIRE'
-    INTO rcv//RateDetailBO         AS rd
-    SELECT cg.@policyNumber AS policyNumber, cp.@startDate AS startDate, rd.@rateFactor AS fireFactor
+    ROOT  //ObservationNetworkBO AS net
+    INTO  net//WeatherStationBO AS stn
+    INTO  stn//ObservationPeriodBO AS pd
+    INTO  pd//MeasurementGroupBO AS mg   WHERE @groupType = 'Atmospheric'
+    INTO  mg//MeasurementBO AS msr       WHERE @measurementType = 'WindSpeed'
+    SELECT net.@networkId AS networkId, stn.@stationId AS stationId,
+           pd.@startDate AS period, msr.@value AS windSpeed, msr.@unit AS windUnit
 ),
-wind AS (
+temperature AS (
   EXTRACT
-    ROOT //*/ClaimGroupBO          AS cg
-    INTO cg//ClaimPeriodBO         AS cp
-    INTO cp//RateComponentVectorBO AS rcv WHERE @rateComponentType = 'WIND'
-    INTO rcv//RateDetailBO         AS rd
-    SELECT cg.@policyNumber AS policyNumber, cp.@startDate AS startDate, rd.@rateFactor AS windFactor
+    ROOT  //ObservationNetworkBO AS net
+    INTO  net//WeatherStationBO AS stn
+    INTO  stn//ObservationPeriodBO AS pd
+    INTO  pd//MeasurementGroupBO AS mg   WHERE @groupType = 'Atmospheric'
+    INTO  mg//MeasurementBO AS msr       WHERE @measurementType = 'Temperature'
+    SELECT net.@networkId AS networkId, stn.@stationId AS stationId,
+           pd.@startDate AS period, msr.@value AS temperature, msr.@unit AS tempUnit
 )
-SELECT f.policyNumber, f.startDate, f.fireFactor, w.windFactor
-FROM fire f
-LEFT JOIN wind w ON f.policyNumber = w.policyNumber
-               AND f.startDate     = w.startDate</pre>
+SELECT w.networkId, w.stationId, w.period, w.windSpeed, t.temperature
+FROM wind AS w
+LEFT JOIN temperature AS t ON w.networkId  = t.networkId
+                          AND w.stationId  = t.stationId
+                          AND w.period     = t.period
+LIMIT 500</pre>
+                </div>
+
+              </section>
+            </div>
           </div>
         </div>
+
         <div id="grid-container" class="ag-theme-alpine-dark" style="display:none; width:100%; height:100%;"></div>
       </div>
     </div>
