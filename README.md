@@ -74,7 +74,9 @@ Pull a value from a side-branch element per row:
 alias//PropertyBO WHERE @type = 'Label' RETURN @value AS label
 ```
 
-### CTEs and JOINs
+### CTEs, JOINs, and GROUP BY
+
+Named subqueries (CTEs) let you build a table from one or more `EXTRACT` blocks and then join or aggregate them.
 
 ```sql
 WITH a AS (EXTRACT ROOT //Foo AS f SELECT f.*),
@@ -84,7 +86,28 @@ FROM a AS a
 LEFT JOIN b AS b ON a.id = b.id
 ```
 
+`FROM DIR` is supported inside CTEs, enabling multi-file aggregation:
+
+```sql
+WITH base AS (
+  EXTRACT FROM DIR 'C:/data/archive/'
+    ROOT //SimulationBatchBO AS sb SELECT sb.batchId, sb.cohortId
+)
+SELECT sb.batchId, sb.cohortId, COUNT(*) AS count
+FROM base AS b
+GROUP BY sb.batchId, sb.cohortId
+HAVING COUNT(*) > 1
+```
+
+`GROUP BY` groups rows by the listed columns. `HAVING COUNT(*) op n` filters groups — use `> 1` to find duplicates.
+
 See [docs/nxql-language.md](docs/nxql-language.md) for the complete language reference with worked examples.
+
+---
+
+## Saved Queries
+
+Click **Save** in the editor header to name and save the current query. Click **Saved ▾** to open a panel listing all saved queries — click **Load** to restore one to the editor, or **✕** to delete it. Saved queries persist across app restarts.
 
 ---
 

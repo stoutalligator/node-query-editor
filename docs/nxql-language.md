@@ -17,6 +17,7 @@ NXQL (Node XML Query Language) is a SQL-like language for extracting structured 
 - [Comments](#comments)
 - [CTEs — WITH … AS](#ctes--with--as)
 - [JOIN and LEFT JOIN](#join-and-left-join)
+- [GROUP BY and HAVING](#group-by-and-having)
 - [Operator reference](#operator-reference)
 - [Full examples](#full-examples)
 
@@ -202,7 +203,7 @@ LIMIT 2000
 
 Files are processed in alphabetical order. The limit applies across all files combined.
 
-`FROM DIR` is not supported inside a CTE — use a standalone `EXTRACT` for directory queries.
+`FROM DIR` is supported inside a CTE, which allows multi-file aggregation with `GROUP BY` — see [GROUP BY and HAVING](#group-by-and-having).
 
 ---
 
@@ -263,6 +264,53 @@ LIMIT 500
 
 ---
 
+## GROUP BY and HAVING
+
+After the `FROM` / `JOIN` clause in a CTE final select, you can group rows and filter by aggregate count.
+
+```sql
+SELECT col1, col2, COUNT(*) AS count
+FROM cteName AS alias
+GROUP BY col1, col2
+HAVING COUNT(*) > 1
+```
+
+- `GROUP BY col1, col2, …` — groups the result rows by the listed column names; one output row per unique combination
+- `COUNT(*) AS colName` — in the `SELECT` list, adds the row count for each group as a column
+- `HAVING COUNT(*) op n` — filters groups by their count; supported operators: `>` `>=` `<` `<=` `=` `!=`
+- `GROUP BY` without `HAVING` returns all groups with their counts
+- Column names in `GROUP BY` must match the projected column names exactly (e.g. `sb.batchId`, not `batchId`, unless the CTE used `AS batchId`)
+
+### Find duplicates across a directory
+
+The primary use case: wrap a `FROM DIR` extract in a CTE, then group to surface key combinations that appear in more than one file (or more than once within files).
+
+```sql
+WITH base AS (
+  EXTRACT FROM DIR 'C:/data/batches/'
+    ROOT  //SimulationBatchBO         AS sb
+    INTO  sb//ProjectionPeriodBO      AS pp
+    INTO  pp//ParameterGroupBO        AS pg1
+    INTO  pg1//ParameterGroupBO       AS pg2
+    INTO  pg2//OutputVectorBO         AS ov  WHERE @outputType = 'BaseProjection'
+    SELECT
+      sb.batchId, sb.cohortId, pp.projectionYear,
+      pg1//ParameterBO WHERE @paramType = 'ScenarioKey' RETURN @integerValue AS Scenario,
+      pg2//ParameterBO WHERE @paramType = 'VariantKey'  RETURN @integerValue AS Variant,
+      ov.xIndex
+)
+SELECT sb.batchId, sb.cohortId, pp.projectionYear,
+       Scenario, Variant, ov.xIndex, COUNT(*) AS count
+FROM base AS b
+GROUP BY sb.batchId, sb.cohortId, pp.projectionYear,
+         Scenario, Variant, ov.xIndex
+HAVING COUNT(*) > 1
+```
+
+This returns only the key combinations that appear more than once across all XML files in the directory, along with how many times each appears.
+
+---
+
 ## Operator reference
 
 | Operator | Type | Example |
@@ -320,6 +368,30 @@ EXTRACT FROM DIR 'C:/data/archive/2024/'
   INTO  stn//MeasurementBO AS msr
   SELECT net.@networkId, stn.@stationId, msr.*
 LIMIT 2000
+```
+
+### CTE with FROM DIR + GROUP BY (find duplicates)
+
+```sql
+WITH base AS (
+  EXTRACT FROM DIR 'C:/data/batches/'
+    ROOT  //SimulationBatchBO         AS sb
+    INTO  sb//ProjectionPeriodBO      AS pp
+    INTO  pp//ParameterGroupBO        AS pg1
+    INTO  pg1//ParameterGroupBO       AS pg2
+    INTO  pg2//OutputVectorBO         AS ov  WHERE @outputType = 'BaseProjection'
+    SELECT
+      sb.batchId, sb.cohortId, pp.projectionYear,
+      pg1//ParameterBO WHERE @paramType = 'ScenarioKey' RETURN @integerValue AS Scenario,
+      pg2//ParameterBO WHERE @paramType = 'VariantKey'  RETURN @integerValue AS Variant,
+      ov.xIndex
+)
+SELECT sb.batchId, sb.cohortId, pp.projectionYear,
+       Scenario, Variant, ov.xIndex, COUNT(*) AS count
+FROM base AS b
+GROUP BY sb.batchId, sb.cohortId, pp.projectionYear,
+         Scenario, Variant, ov.xIndex
+HAVING COUNT(*) > 1
 ```
 
 ### CTE + LEFT JOIN

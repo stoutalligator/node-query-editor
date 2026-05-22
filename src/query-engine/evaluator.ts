@@ -3,6 +3,8 @@ import type {
   ExtractStep, SelectExpr, LookupExpr, WhereClause,
   ResultRow, QueryResult, ExtractSource,
 } from './types';
+import * as fs from 'fs';
+import * as path from 'path';
 import { parseDocument } from 'htmlparser2';
 import { isTag, isDocument } from 'domhandler';
 import type { Document, Element, AnyNode } from 'domhandler';
@@ -32,13 +34,32 @@ export function currentFilePath(): string | null { return defaultFilePath; }
 
 function resolveDoc(source: ExtractSource | null): Document {
   if (source !== null) {
-    if (source.kind === 'dir') throw new Error("FROM DIR is not supported inside a CTE. Use a standalone EXTRACT.");
+    if (source.kind === 'dir') throw new Error("Internal: resolveDoc called with dir source — use runDirExtract instead.");
     const doc = docCache.get(source.path);
     if (!doc) throw new Error(`File not loaded: ${source.path}`);
     return doc;
   }
   if (defaultDoc) return defaultDoc;
   throw new Error("No file loaded. Load a file or add FROM 'path/to/file.xml' to your EXTRACT.");
+}
+
+/** Run an EXTRACT query against every *.xml in a directory; injects _source column. */
+function runDirExtract(query: ExtractQuery): ResultRow[] {
+  const dirPath = query.source!.path;
+  const fileNames = fs.readdirSync(dirPath)
+    .filter(f => f.toLowerCase().endsWith('.xml'))
+    .sort();
+  const allRows: ResultRow[] = [];
+  for (const fileName of fileNames) {
+    const fp = path.join(dirPath, fileName);
+    if (!hasDocForPath(fp)) {
+      loadXmlForPath(fs.readFileSync(fp, 'utf8'), fp);
+    }
+    const fileQuery: ExtractQuery = { ...query, source: { kind: 'file', path: fp } };
+    const res = runExtract(fileQuery, docCache.get(fp)!, null);
+    for (const row of res.rows) allRows.push({ _source: fileName, ...row });
+  }
+  return allRows;
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -254,12 +275,16 @@ function deriveColumns(select: Array<SelectExpr | LookupExpr>, rows: ResultRow[]
 // ── CTE + JOIN evaluator ──────────────────────────────────────────────────────
 
 function runCte(q: CteQuery, limitOverride: number | null): QueryResult {
-  // Build named flat tables from each CTE (each may reference a different source doc)
+  // Build named flat tables from each CTE (each may reference a different source doc or dir)
   const tables: Record<string, ResultRow[]> = {};
   for (const cte of q.ctes) {
-    const doc = resolveDoc(cte.query.source);
-    const res = runExtract(cte.query, doc, null);
-    tables[cte.name] = res.rows;
+    if (cte.query.source?.kind === 'dir') {
+      tables[cte.name] = runDirExtract(cte.query);
+    } else {
+      const doc = resolveDoc(cte.query.source);
+      const res = runExtract(cte.query, doc, null);
+      tables[cte.name] = res.rows;
+    }
   }
 
   // Execute final SELECT with JOINs
@@ -269,6 +294,22 @@ function runCte(q: CteQuery, limitOverride: number | null): QueryResult {
   for (const join of final.joins) {
     const right = tables[join.table] ?? [];
     rows = applyJoin(rows, final.fromAlias, right, join);
+  }
+
+  // GROUP BY + HAVING
+  if (final.groupBy && final.groupBy.length > 0) {
+    const groups = new Map<string, { row: ResultRow; count: number }>();
+    for (const row of rows) {
+      const key = final.groupBy.map(c => resolveColExpr(c, row)).join('\0');
+      if (!groups.has(key)) groups.set(key, { row: { ...row }, count: 0 });
+      groups.get(key)!.count++;
+    }
+    rows = [];
+    for (const { row, count } of groups.values()) {
+      if (final.having && !applyHaving(count, final.having)) continue;
+      row['__count__'] = String(count);
+      rows.push(row);
+    }
   }
 
   // Apply column projection
@@ -331,6 +372,7 @@ function applyJoin(
 }
 
 function resolveColExpr(expr: string, row: ResultRow): string {
+  if (expr === 'COUNT(*)') return row['__count__'] ?? '0';
   // expr is "alias.column" or just "column"
   if (row[expr] !== undefined) return row[expr];
   // Try stripping alias prefix
@@ -340,4 +382,16 @@ function resolveColExpr(expr: string, row: ResultRow): string {
     if (row[col] !== undefined) return row[col];
   }
   return '';
+}
+
+function applyHaving(count: number, having: { op: string; value: number }): boolean {
+  switch (having.op) {
+    case '>':  return count > having.value;
+    case '>=': return count >= having.value;
+    case '<':  return count < having.value;
+    case '<=': return count <= having.value;
+    case '=':  return count === having.value;
+    case '!=': return count !== having.value;
+    default:   return true;
+  }
 }

@@ -23,6 +23,7 @@ type TokKind =
 const KEYWORDS = new Set([
   'EXTRACT','ROOT','INTO','WHERE','SELECT','AS','WITH','FROM','JOIN','LEFT',
   'INNER','ON','AND','IN','NOT','XPATH','LIMIT','ORDER','BY','ASC','DESC','RETURN','DIR',
+  'GROUP','HAVING','COUNT',
 ]);
 
 interface Token { kind: TokKind; value: string; pos: number; }
@@ -283,7 +284,7 @@ function parseInList(ts: TokenStream): string[] {
 function parseSelectExprs(ts: TokenStream): Array<SelectExpr | LookupExpr> {
   const exprs: Array<SelectExpr | LookupExpr> = [];
 
-  while (!ts.eof() && !ts.peekKw('LIMIT') && !ts.peekKw('ORDER')) {
+  while (!ts.eof() && !ts.peekKw('LIMIT') && !ts.peekKw('ORDER') && ts.peek().kind !== 'RPAREN') {
     const t = ts.next();
 
     // Inline lookup: alias//Tag [WHERE @attr OP value] RETURN @attr AS name
@@ -382,10 +383,30 @@ function parseCte(ts: TokenStream): CteQuery {
     joins.push({ type: joinType, table, alias, on });
   }
 
+  // GROUP BY
+  let groupBy: string[] | null = null;
+  if (ts.consumeKw('GROUP')) {
+    ts.expectKw('BY');
+    groupBy = [];
+    do {
+      groupBy.push(parseColRef(ts));
+    } while (ts.peek().kind === 'COMMA' && (ts.next(), true));
+  }
+
+  // HAVING COUNT(*) op n
+  let having: { op: WhereOp; value: number } | null = null;
+  if (ts.consumeKw('HAVING')) {
+    ts.expectKw('COUNT');
+    ts.next(); ts.next(); ts.next(); // consume ( * )
+    const opTok = ts.next();
+    const valTok = ts.next();
+    having = { op: opTok.value as WhereOp, value: parseFloat(valTok.value) };
+  }
+
   let limit: number | null = null;
   if (ts.peekKw('LIMIT')) { ts.next(); limit = parseInt(ts.next().value, 10); }
 
-  return { kind: 'cte', ctes, final: { columns, from: fromTable, fromAlias, joins, limit } };
+  return { kind: 'cte', ctes, final: { columns, from: fromTable, fromAlias, joins, groupBy, having, limit } };
 }
 
 function parseColRef(ts: TokenStream): string {

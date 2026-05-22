@@ -37,11 +37,31 @@
       <span id="result-badge"></span>
     </div>
 
+    <!-- ── Saved queries panel (floats over editor) ── -->
+    <div id="saved-panel" class="hidden">
+      <div class="saved-panel-header">
+        <span class="saved-panel-title">Saved Queries</span>
+        <button id="saved-panel-close" class="btn-ghost">&#x2715;</button>
+      </div>
+      <div id="saved-list">
+        <div class="saved-empty">No saved queries yet.</div>
+      </div>
+    </div>
+
     <!-- ── Main pane ── -->
     <div id="main-pane">
       <div id="editor-pane">
         <div id="editor-header">
           <span class="editor-title">Query Editor</span>
+          <div class="editor-header-actions">
+            <div id="save-name-form" class="hidden">
+              <input id="save-name-input" type="text" placeholder="Query name…" maxlength="60" />
+              <button id="save-name-ok" class="btn-ghost btn-ghost--green">Save</button>
+              <button id="save-name-cancel" class="btn-ghost">&#x2715;</button>
+            </div>
+            <button id="save-query-btn" class="btn-ghost">Save</button>
+            <button id="saved-queries-btn" class="btn-ghost">Saved &#x25BE;</button>
+          </div>
           <span class="editor-hint"><kbd>Ctrl+Enter</kbd> to run</span>
         </div>
         <div id="monaco-container"></div>

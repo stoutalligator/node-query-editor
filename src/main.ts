@@ -7,6 +7,21 @@ import { autoUpdater } from 'electron-updater';
 let mainWindow: BrowserWindow | null = null;
 let worker: Worker | null = null;
 
+// ── Saved queries ─────────────────────────────────────────────────────────────
+
+type SavedQuery = { id: string; name: string; query: string };
+
+const savedQueriesPath = () => path.join(app.getPath('userData'), 'saved-queries.json');
+
+function readSavedQueries(): SavedQuery[] {
+  try { return JSON.parse(fs.readFileSync(savedQueriesPath(), 'utf8')); }
+  catch { return []; }
+}
+
+function writeSavedQueries(list: SavedQuery[]): void {
+  fs.writeFileSync(savedQueriesPath(), JSON.stringify(list, null, 2), 'utf8');
+}
+
 // ── Worker lifecycle ──────────────────────────────────────────────────────────
 
 function createWorker(): Worker {
@@ -128,6 +143,21 @@ ipcMain.handle('run-query', (_event, queryText: string, limit: number | null) =>
 
 ipcMain.handle('copy-to-clipboard', (_event, text: string) => {
   clipboard.writeText(text);
+});
+
+ipcMain.handle('load-queries', () => readSavedQueries());
+
+ipcMain.handle('save-query', (_event, name: string, query: string) => {
+  const list = readSavedQueries();
+  list.unshift({ id: Date.now().toString(), name, query });
+  writeSavedQueries(list);
+  return list;
+});
+
+ipcMain.handle('delete-query', (_event, id: string) => {
+  const list = readSavedQueries().filter(q => q.id !== id);
+  writeSavedQueries(list);
+  return list;
 });
 
 ipcMain.handle('export-csv', async (_event, csvText: string) => {
