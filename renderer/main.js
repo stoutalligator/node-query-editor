@@ -50,7 +50,7 @@
     monaco.languages.setMonarchTokensProvider('nxql', {
       keywords: ['EXTRACT','ROOT','INTO','WHERE','SELECT','AS','WITH','FROM',
                  'JOIN','LEFT','INNER','ON','AND','IN','NOT','XPATH','LIMIT',
-                 'ORDER','BY','ASC','DESC'],
+                 'ORDER','BY','ASC','DESC','RETURN','DIR'],
       operators: ['=','!=','>','<','>=','<='],
       tokenizer: {
         root: [

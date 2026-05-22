@@ -1,7 +1,7 @@
 import type {
   ParsedQuery, ExtractQuery, CteQuery, XPathQuery,
   ExtractStep, SelectExpr, LookupExpr, WhereClause, WhereOp,
-  CteDefinition, FinalSelect, JoinClause, JoinType,
+  CteDefinition, FinalSelect, JoinClause, JoinType, ExtractSource,
 } from './types';
 
 // ── Tokenizer ─────────────────────────────────────────────────────────────────
@@ -22,7 +22,7 @@ type TokKind =
 
 const KEYWORDS = new Set([
   'EXTRACT','ROOT','INTO','WHERE','SELECT','AS','WITH','FROM','JOIN','LEFT',
-  'INNER','ON','AND','IN','NOT','XPATH','LIMIT','ORDER','BY','ASC','DESC','RETURN',
+  'INNER','ON','AND','IN','NOT','XPATH','LIMIT','ORDER','BY','ASC','DESC','RETURN','DIR',
 ]);
 
 interface Token { kind: TokKind; value: string; pos: number; }
@@ -193,12 +193,18 @@ export function parse(src: string): ParsedQuery {
 function parseExtract(ts: TokenStream): ExtractQuery {
   ts.expectKw('EXTRACT');
 
-  // Optional: FROM 'file-path'
-  let sourcePath: string | null = null;
+  // Optional: FROM 'file-path'  or  FROM DIR 'dir-path'
+  let source: ExtractSource | null = null;
   if (ts.consumeKw('FROM')) {
-    const pathTok = ts.next();
-    if (pathTok.kind !== 'STR') throw new SyntaxError(`Expected string path after FROM, got '${pathTok.value}'`);
-    sourcePath = pathTok.value;
+    if (ts.consumeKw('DIR')) {
+      const pathTok = ts.next();
+      if (pathTok.kind !== 'STR') throw new SyntaxError(`Expected string path after FROM DIR, got '${pathTok.value}'`);
+      source = { kind: 'dir', path: pathTok.value };
+    } else {
+      const pathTok = ts.next();
+      if (pathTok.kind !== 'STR') throw new SyntaxError(`Expected string path after FROM, got '${pathTok.value}'`);
+      source = { kind: 'file', path: pathTok.value };
+    }
   }
 
   const steps: ExtractStep[] = [];
@@ -233,7 +239,7 @@ function parseExtract(ts: TokenStream): ExtractQuery {
     limit = parseInt(t.value, 10);
   }
 
-  return { kind: 'extract', sourcePath, steps, select, limit };
+  return { kind: 'extract', source, steps, select, limit };
 }
 
 function parseWhere(ts: TokenStream): WhereClause {

@@ -31,9 +31,13 @@ export interface ExtractStep {
   where: WhereClause | null;
 }
 
+export type ExtractSource =
+  | { kind: 'file'; path: string }   // FROM 'path/to/file.xml'
+  | { kind: 'dir';  path: string };  // FROM DIR 'path/to/dir' — all *.xml in that directory
+
 export interface ExtractQuery {
   kind: 'extract';
-  sourcePath: string | null;  // file path from FROM 'path', null = use loaded doc
+  source: ExtractSource | null;  // null = use doc loaded via browse button
   steps: ExtractStep[];
   select: Array<SelectExpr | LookupExpr>;
   limit: number | null;

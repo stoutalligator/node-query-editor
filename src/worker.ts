@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { parse as parseDsl } from './query-engine/parser';
 import { loadXml, loadXmlForPath, hasDocForPath, evaluate, hasDocument } from './query-engine/evaluator';
-import type { WorkerInMessage, WorkerOutMessage, ParsedQuery } from './query-engine/types';
+import type { WorkerInMessage, WorkerOutMessage, ParsedQuery, ExtractQuery, ResultRow } from './query-engine/types';
 
 function send(msg: WorkerOutMessage): void {
   parentPort!.postMessage(msg);
@@ -38,7 +38,13 @@ function handleRunQuery(queryText: string, limit: number | null): void {
     return;
   }
 
-  // Auto-load any XML sources declared inline in the query
+  // FROM DIR — handle separately (expands to multiple files, unions results)
+  if (parsed.kind === 'extract' && parsed.source?.kind === 'dir') {
+    handleDirQuery(parsed, limit);
+    return;
+  }
+
+  // Auto-load any single-file sources declared inline in the query
   const sourcePaths = getQuerySourcePaths(parsed);
   for (const fp of sourcePaths) {
     if (!hasDocForPath(fp)) {
@@ -67,8 +73,69 @@ function handleRunQuery(queryText: string, limit: number | null): void {
   }
 }
 
+function handleDirQuery(query: ExtractQuery, limit: number | null): void {
+  const dirPath = query.source!.path;
+
+  let fileNames: string[];
+  try {
+    fileNames = fs.readdirSync(dirPath)
+      .filter(f => f.toLowerCase().endsWith('.xml'))
+      .sort();
+  } catch (err: any) {
+    send({ type: 'queryError', error: { message: `Cannot read directory '${dirPath}': ${err.message}` } });
+    return;
+  }
+
+  if (fileNames.length === 0) {
+    send({ type: 'queryError', error: { message: `No XML files found in '${dirPath}'` } });
+    return;
+  }
+
+  const allRows: ResultRow[] = [];
+  let columns: string[] = [];
+  let truncated = false;
+
+  for (const fileName of fileNames) {
+    if (limit !== null && allRows.length >= limit) {
+      truncated = true;
+      break;
+    }
+
+    const fp = path.join(dirPath, fileName);
+    if (!hasDocForPath(fp)) {
+      try {
+        send({ type: 'progress', message: `Loading ${fileName} (${fileNames.indexOf(fileName) + 1}/${fileNames.length})…` });
+        const xml = fs.readFileSync(fp, 'utf8');
+        loadXmlForPath(xml, fp);
+      } catch (err: any) {
+        send({ type: 'queryError', error: { message: `Failed to load '${fp}': ${err.message}` } });
+        return;
+      }
+    }
+
+    try {
+      const remaining = limit !== null ? limit - allRows.length : null;
+      const fileQuery: ExtractQuery = { ...query, source: { kind: 'file', path: fp } };
+      const res = evaluate(fileQuery, remaining);
+
+      if (columns.length === 0 && res.columns.length > 0) {
+        columns = ['_source', ...res.columns];
+      }
+
+      for (const row of res.rows) {
+        allRows.push({ _source: fileName, ...row });
+      }
+    } catch (err: any) {
+      send({ type: 'queryError', error: { message: `Error querying '${fileName}': ${err.message}` } });
+      return;
+    }
+  }
+
+  send({ type: 'queryResult', result: { columns, rows: allRows, totalRows: allRows.length, truncated } });
+}
+
 function getQuerySourcePaths(parsed: ParsedQuery): string[] {
-  if (parsed.kind === 'extract') return parsed.sourcePath ? [parsed.sourcePath] : [];
-  if (parsed.kind === 'cte') return parsed.ctes.map(c => c.query.sourcePath).filter((p): p is string => p !== null);
+  if (parsed.kind === 'extract') return parsed.source?.kind === 'file' ? [parsed.source.path] : [];
+  if (parsed.kind === 'cte') return parsed.ctes.map(c => c.query.source).filter((s): s is { kind: 'file'; path: string } => s?.kind === 'file').map(s => s.path);
   return [];
 }

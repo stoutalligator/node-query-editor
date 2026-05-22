@@ -1,7 +1,7 @@
 import type {
   ParsedQuery, ExtractQuery, CteQuery,
   ExtractStep, SelectExpr, LookupExpr, WhereClause,
-  ResultRow, QueryResult,
+  ResultRow, QueryResult, ExtractSource,
 } from './types';
 import { parseDocument } from 'htmlparser2';
 import { isTag, isDocument } from 'domhandler';
@@ -30,10 +30,11 @@ export function hasDocForPath(filePath: string): boolean { return docCache.has(f
 export function hasDocument(): boolean { return defaultDoc !== null; }
 export function currentFilePath(): string | null { return defaultFilePath; }
 
-function resolveDoc(sourcePath: string | null): Document {
-  if (sourcePath !== null) {
-    const doc = docCache.get(sourcePath);
-    if (!doc) throw new Error(`File not loaded: ${sourcePath}`);
+function resolveDoc(source: ExtractSource | null): Document {
+  if (source !== null) {
+    if (source.kind === 'dir') throw new Error("FROM DIR is not supported inside a CTE. Use a standalone EXTRACT.");
+    const doc = docCache.get(source.path);
+    if (!doc) throw new Error(`File not loaded: ${source.path}`);
     return doc;
   }
   if (defaultDoc) return defaultDoc;
@@ -44,7 +45,7 @@ function resolveDoc(sourcePath: string | null): Document {
 
 export function evaluate(query: ParsedQuery, limit: number | null): QueryResult {
   if (query.kind === 'extract') {
-    const doc = resolveDoc(query.sourcePath);
+    const doc = resolveDoc(query.source);
     return runExtract(query, doc, limit ?? query.limit);
   }
 
@@ -256,7 +257,7 @@ function runCte(q: CteQuery, limitOverride: number | null): QueryResult {
   // Build named flat tables from each CTE (each may reference a different source doc)
   const tables: Record<string, ResultRow[]> = {};
   for (const cte of q.ctes) {
-    const doc = resolveDoc(cte.query.sourcePath);
+    const doc = resolveDoc(cte.query.source);
     const res = runExtract(cte.query, doc, null);
     tables[cte.name] = res.rows;
   }
