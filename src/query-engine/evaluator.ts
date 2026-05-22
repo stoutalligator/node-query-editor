@@ -9,28 +9,47 @@ import type { Document, Element, AnyNode } from 'domhandler';
 
 // ── XML document cache ────────────────────────────────────────────────────────
 
-let cachedDoc: Document | null = null;
-let cachedFilePath: string | null = null;
+const docCache = new Map<string, Document>();
+let defaultDoc: Document | null = null;     // set by browse-button loadFile
+let defaultFilePath: string | null = null;
 
+/** Load a file via the browse button — becomes the default doc for queries without FROM. */
 export function loadXml(xml: string, filePath: string): void {
-  cachedDoc = parseDocument(xml, { xmlMode: true });
-  cachedFilePath = filePath;
+  const doc = parseDocument(xml, { xmlMode: true });
+  docCache.set(filePath, doc);
+  defaultDoc = doc;
+  defaultFilePath = filePath;
 }
 
-export function hasDocument(): boolean { return cachedDoc !== null; }
-export function currentFilePath(): string | null { return cachedFilePath; }
+/** Load a file referenced inline in a query (FROM 'path'). Does not change the default doc. */
+export function loadXmlForPath(xml: string, filePath: string): void {
+  docCache.set(filePath, parseDocument(xml, { xmlMode: true }));
+}
+
+export function hasDocForPath(filePath: string): boolean { return docCache.has(filePath); }
+export function hasDocument(): boolean { return defaultDoc !== null; }
+export function currentFilePath(): string | null { return defaultFilePath; }
+
+function resolveDoc(sourcePath: string | null): Document {
+  if (sourcePath !== null) {
+    const doc = docCache.get(sourcePath);
+    if (!doc) throw new Error(`File not loaded: ${sourcePath}`);
+    return doc;
+  }
+  if (defaultDoc) return defaultDoc;
+  throw new Error("No file loaded. Load a file or add FROM 'path/to/file.xml' to your EXTRACT.");
+}
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 export function evaluate(query: ParsedQuery, limit: number | null): QueryResult {
-  if (!cachedDoc) throw new Error('No document loaded.');
-
   if (query.kind === 'extract') {
-    return runExtract(query, cachedDoc, limit ?? query.limit);
+    const doc = resolveDoc(query.sourcePath);
+    return runExtract(query, doc, limit ?? query.limit);
   }
 
   if (query.kind === 'cte') {
-    return runCte(query, cachedDoc, limit);
+    return runCte(query, limit);
   }
 
   throw new Error('XPATH mode not yet implemented in evaluator (routed separately).');
@@ -233,10 +252,11 @@ function deriveColumns(select: Array<SelectExpr | LookupExpr>, rows: ResultRow[]
 
 // ── CTE + JOIN evaluator ──────────────────────────────────────────────────────
 
-function runCte(q: CteQuery, doc: Document, limitOverride: number | null): QueryResult {
-  // Build named flat tables from each CTE
+function runCte(q: CteQuery, limitOverride: number | null): QueryResult {
+  // Build named flat tables from each CTE (each may reference a different source doc)
   const tables: Record<string, ResultRow[]> = {};
   for (const cte of q.ctes) {
+    const doc = resolveDoc(cte.query.sourcePath);
     const res = runExtract(cte.query, doc, null);
     tables[cte.name] = res.rows;
   }

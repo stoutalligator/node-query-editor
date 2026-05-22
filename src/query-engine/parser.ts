@@ -46,8 +46,16 @@ function tokenize(src: string): Token[] {
       i++;
       let s = '';
       while (i < src.length && src[i] !== "'") {
-        if (src[i] === '\\') i++;
-        s += src[i++];
+        if (src[i] === '\\' && i + 1 < src.length) {
+          const next = src[i + 1];
+          if (next === "'" || next === '\\') {
+            i++; s += src[i++]; // true escape: \' or \\
+          } else {
+            s += src[i++];       // literal backslash (e.g. \p stays as \p for Windows paths)
+          }
+        } else {
+          s += src[i++];
+        }
       }
       i++; // closing quote
       tokens.push({ kind: 'STR', value: s, pos: start });
@@ -184,6 +192,15 @@ export function parse(src: string): ParsedQuery {
 
 function parseExtract(ts: TokenStream): ExtractQuery {
   ts.expectKw('EXTRACT');
+
+  // Optional: FROM 'file-path'
+  let sourcePath: string | null = null;
+  if (ts.consumeKw('FROM')) {
+    const pathTok = ts.next();
+    if (pathTok.kind !== 'STR') throw new SyntaxError(`Expected string path after FROM, got '${pathTok.value}'`);
+    sourcePath = pathTok.value;
+  }
+
   const steps: ExtractStep[] = [];
 
   // ROOT step
@@ -216,7 +233,7 @@ function parseExtract(ts: TokenStream): ExtractQuery {
     limit = parseInt(t.value, 10);
   }
 
-  return { kind: 'extract', steps, select, limit };
+  return { kind: 'extract', sourcePath, steps, select, limit };
 }
 
 function parseWhere(ts: TokenStream): WhereClause {

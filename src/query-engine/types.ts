@@ -33,6 +33,7 @@ export interface ExtractStep {
 
 export interface ExtractQuery {
   kind: 'extract';
+  sourcePath: string | null;  // file path from FROM 'path', null = use loaded doc
   steps: ExtractStep[];
   select: Array<SelectExpr | LookupExpr>;
   limit: number | null;
