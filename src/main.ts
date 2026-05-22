@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, clipboard } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import { Worker } from 'worker_threads';
+import { autoUpdater } from 'electron-updater';
 
 let mainWindow: BrowserWindow | null = null;
 let worker: Worker | null = null;
@@ -67,11 +68,20 @@ function createWindow(): void {
 app.whenReady().then(() => {
   createWindow();
   app.on('activate', () => { if (!mainWindow) createWindow(); });
+
+  autoUpdater.checkForUpdates().catch(() => { /* ignore — dev build or offline */ });
+  autoUpdater.on('update-downloaded', (info) => {
+    if (mainWindow) mainWindow.webContents.send('update-downloaded', info.version);
+  });
 });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+
+// ── IPC: auto-update ─────────────────────────────────────────────────────────
+
+ipcMain.on('install-update', () => { autoUpdater.quitAndInstall(); });
 
 // ── IPC: file operations ──────────────────────────────────────────────────────
 

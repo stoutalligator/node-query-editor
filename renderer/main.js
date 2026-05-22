@@ -274,6 +274,19 @@
     }
   });
 
+  // ── Auto-update banner ────────────────────────────────────────────────────
+  if (window.api.onUpdateDownloaded) {
+    window.api.onUpdateDownloaded((version) => {
+      const bar = document.getElementById('update-bar');
+      document.getElementById('update-msg').textContent =
+        `\u2191 Version ${version} ready to install`;
+      bar.classList.remove('hidden');
+    });
+    document.getElementById('update-install-btn').addEventListener('click', () => {
+      window.api.installUpdate();
+    });
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────
   function setStatus(text, isError = false) {
     const el = document.getElementById('file-status');

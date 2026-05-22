@@ -1,7 +1,7 @@
 import type {
   ParsedQuery, ExtractQuery, CteQuery, XPathQuery,
   ExtractStep, SelectExpr, LookupExpr, WhereClause, WhereOp,
-  CteDefinition, FinalSelect, JoinClause, JoinType, ExtractSource,
+  CteDefinition, JoinClause, JoinType, ExtractSource,
 } from './types';
 
 // ── Tokenizer ─────────────────────────────────────────────────────────────────

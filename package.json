@@ -8,18 +8,25 @@
     "watch": "node esbuild.js --watch",
     "start": "npm run compile && electron .",
     "dev": "node esbuild.js --watch & electron . --dev",
-    "package": "npm run compile && electron-builder"
+    "package": "npm run compile && electron-builder",
+    "release": "npm run compile && electron-builder --publish always",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "electron": "^31.0.0",
     "electron-builder": "^24.0.0",
     "esbuild": "^0.21.0",
-    "typescript": "^5.5.0"
+    "eslint": "^10.4.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.59.4"
   },
   "dependencies": {
     "ag-grid-community": "^35.3.0",
     "domhandler": "^5.0.3",
+    "electron-updater": "^6.8.3",
     "htmlparser2": "^9.1.0",
     "monaco-editor": "^0.55.1"
   },
@@ -39,6 +46,13 @@
     },
     "mac": {
       "target": "dmg"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "stoutalligator",
+        "repo": "node-query-editor"
+      }
+    ]
   }
 }

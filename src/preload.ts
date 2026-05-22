@@ -9,4 +9,8 @@ contextBridge.exposeInMainWorld('api', {
   onWorkerMessage:  (cb: (msg: any) => void) => {
     ipcRenderer.on('worker-message', (_e, msg) => cb(msg));
   },
+  onUpdateDownloaded: (cb: (version: string) => void) => {
+    ipcRenderer.on('update-downloaded', (_e, version) => cb(version));
+  },
+  installUpdate: () => ipcRenderer.send('install-update'),
 });

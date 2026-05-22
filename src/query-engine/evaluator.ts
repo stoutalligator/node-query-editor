@@ -75,7 +75,7 @@ function descend(
   context: AnyNode,
   ancestorAttrs: Record<string, Record<string, string>>,
   ancestorNodes: Record<string, AnyNode>,
-  select: SelectExpr[],
+  select: Array<SelectExpr | LookupExpr>,
   out: ResultRow[],
   limit: number | null,
 ): void {
