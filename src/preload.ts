@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('api', {
   runQuery:         (q: string, lim: number | null) => ipcRenderer.invoke('run-query', q, lim),
   copyToClipboard:  (t: string)              => ipcRenderer.invoke('copy-to-clipboard', t),
   exportCsv:        (t: string)              => ipcRenderer.invoke('export-csv', t),
+  exportXml:        (q: string, mode: 'keep' | 'exclude') => ipcRenderer.invoke('export-xml', q, mode),
   onWorkerMessage:  (cb: (msg: any) => void) => {
     ipcRenderer.on('worker-message', (_e, msg) => cb(msg));
   },
