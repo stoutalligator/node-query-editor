@@ -2,7 +2,7 @@ import { parentPort } from 'worker_threads';
 import * as fs from 'fs';
 import * as path from 'path';
 import { parse as parseDsl } from './query-engine/parser';
-import { loadXml, loadXmlForPath, hasDocForPath, evaluate, hasDocument } from './query-engine/evaluator';
+import { loadXml, loadXmlForPath, hasDocForPath, evaluate, hasDocument, exportFilteredXml } from './query-engine/evaluator';
 import type { WorkerInMessage, WorkerOutMessage, ParsedQuery, ExtractQuery, ResultRow } from './query-engine/types';
 
 function send(msg: WorkerOutMessage): void {
@@ -11,8 +11,9 @@ function send(msg: WorkerOutMessage): void {
 
 parentPort!.on('message', (msg: WorkerInMessage) => {
   switch (msg.type) {
-    case 'loadFile':  handleLoadFile(msg.filePath);              break;
-    case 'runQuery':  handleRunQuery(msg.queryText, msg.limit);  break;
+    case 'loadFile':  handleLoadFile(msg.filePath);                            break;
+    case 'runQuery':  handleRunQuery(msg.queryText, msg.limit);                break;
+    case 'exportXml': handleExportXml(msg.queryText, msg.mode, msg.savePath); break;
   }
 });
 
@@ -144,4 +145,24 @@ function hasDirSource(parsed: ParsedQuery): boolean {
   if (parsed.kind === 'extract') return parsed.source?.kind === 'dir';
   if (parsed.kind === 'cte') return parsed.ctes.some(c => c.query.source?.kind === 'dir');
   return false;
+}
+
+function handleExportXml(queryText: string, mode: 'keep' | 'exclude', savePath: string): void {
+  let parsed: ParsedQuery;
+  try {
+    parsed = parseDsl(queryText);
+  } catch (err: any) {
+    send({ type: 'xmlExportError', message: err.message });
+    return;
+  }
+
+  try {
+    send({ type: 'progress', message: 'Building filtered XML…' });
+    const xml = exportFilteredXml(parsed, mode);
+    send({ type: 'progress', message: 'Writing file…' });
+    fs.writeFileSync(savePath, xml, 'utf8');
+    send({ type: 'xmlExportDone', savePath });
+  } catch (err: any) {
+    send({ type: 'xmlExportError', message: err.message });
+  }
 }

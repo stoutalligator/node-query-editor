@@ -3,6 +3,8 @@ import type {
   ExtractStep, SelectExpr, LookupExpr, WhereClause,
   ResultRow, QueryResult, ExtractSource,
 } from './types';
+
+export type XmlFilterMode = 'keep' | 'exclude';
 import * as fs from 'fs';
 import * as path from 'path';
 import { parseDocument } from 'htmlparser2';
@@ -394,4 +396,128 @@ function applyHaving(count: number, having: { op: string; value: number }): bool
     case '!=': return count !== having.value;
     default:   return true;
   }
+}
+
+// ── Filtered XML export ───────────────────────────────────────────────────────
+
+function escapeAttrVal(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function escapeTextContent(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * Builds the set of Element nodes to omit from the serialized output.
+ *
+ * keep mode   — omit elements that MATCH the path but FAIL the WHERE filter
+ *               (i.e. keep only what passes; applies to each step within its parent context)
+ * exclude mode — omit elements that MATCH the path AND PASS the WHERE filter
+ *               (i.e. remove the matching ones; applies globally for each step)
+ */
+function buildExcludeSet(query: ExtractQuery, doc: Document, mode: XmlFilterMode): Set<Element> {
+  const excluded = new Set<Element>();
+
+  if (mode === 'keep') {
+    // Walk steps in order; each step only searches within nodes kept by the previous step
+    let prevContexts: AnyNode[] = [doc as unknown as AnyNode];
+    for (const step of query.steps) {
+      const nextKept: Element[] = [];
+      for (const ctx of prevContexts) {
+        for (const el of matchPath(step.path, ctx)) {
+          if (passesWhere(el, step.where)) {
+            nextKept.push(el);
+          } else {
+            excluded.add(el);
+          }
+        }
+      }
+      prevContexts = nextKept;
+    }
+  } else {
+    // Exclude mode: each step searched globally; elements passing WHERE are excluded
+    for (const step of query.steps) {
+      for (const el of matchPath(step.path, doc as unknown as AnyNode)) {
+        if (passesWhere(el, step.where)) {
+          excluded.add(el);
+        }
+      }
+    }
+  }
+
+  return excluded;
+}
+
+function serializeAnyNode(node: AnyNode, excluded: Set<Element>, indent: number = 0): string {
+  const pad = '  '.repeat(indent);
+
+  if (isTag(node)) {
+    if (excluded.has(node as Element)) return '';
+    const el = node as Element;
+    const attrs = Object.entries(el.attribs ?? {})
+      .map(([k, v]) => ` ${k}="${escapeAttrVal(v)}"`)
+      .join('');
+
+    const rawChildren = el.children ?? [];
+
+    // Determine whether children are purely text (inline) or element-bearing (block)
+    const elementChildren = rawChildren.filter(c => isTag(c) || (c as any).type === 'comment');
+    const hasElementChildren = elementChildren.length > 0;
+
+    if (rawChildren.length === 0) {
+      return `${pad}<${el.name}${attrs}/>`;
+    }
+
+    if (hasElementChildren) {
+      // Block layout: each child on its own indented line, filtered empty strings removed
+      const childLines = rawChildren
+        .map(c => serializeAnyNode(c as AnyNode, excluded, indent + 1))
+        .filter(s => s !== '');
+      if (childLines.length === 0) {
+        return `${pad}<${el.name}${attrs}/>`;
+      }
+      return `${pad}<${el.name}${attrs}>\n${childLines.join('\n')}\n${pad}</${el.name}>`;
+    }
+
+    // Inline layout: text-only children, no extra whitespace
+    const inline = rawChildren.map(c => serializeAnyNode(c as AnyNode, excluded, 0)).join('');
+    return `${pad}<${el.name}${attrs}>${inline}</${el.name}>`;
+  }
+
+  if (isDocument(node)) {
+    return (node as Document).children
+      .map(c => serializeAnyNode(c as AnyNode, excluded, indent))
+      .filter(s => s !== '')
+      .join('\n');
+  }
+
+  const raw = node as any;
+  if (raw.type === 'text') {
+    const text = escapeTextContent(raw.data ?? '').trim();
+    return text ? `${pad}${text}` : '';
+  }
+  if (raw.type === 'comment') return `${pad}<!--${raw.data ?? ''}-->`;
+  return '';
+}
+
+/**
+ * Serialize the loaded XML document with nodes filtered according to the
+ * EXTRACT query's WHERE clauses.
+ *
+ * mode = 'keep'    → only keep elements that pass each step's WHERE filter
+ * mode = 'exclude' → remove elements that pass each step's WHERE filter
+ */
+export function exportFilteredXml(query: ParsedQuery, mode: XmlFilterMode): string {
+  if (query.kind !== 'extract') {
+    throw new Error('XML export only supports EXTRACT queries (not WITH/CTE).');
+  }
+  if (query.source?.kind === 'dir') {
+    throw new Error('XML export does not support FROM DIR queries.');
+  }
+
+  const doc = resolveDoc(query.source);
+  const excluded = buildExcludeSet(query, doc, mode);
+  const body = serializeAnyNode(doc as unknown as AnyNode, excluded);
+  return `<?xml version="1.0" encoding="UTF-8"?>\n${body}`;
 }

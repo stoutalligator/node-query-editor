@@ -171,3 +171,15 @@ ipcMain.handle('export-csv', async (_event, csvText: string) => {
     fs.writeFileSync(result.filePath, csvText, 'utf8');
   }
 });
+
+ipcMain.handle('export-xml', async (_event, queryText: string, mode: 'keep' | 'exclude') => {
+  if (!mainWindow) return;
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Export Filtered XML',
+    filters: [{ name: 'XML', extensions: ['xml'] }],
+    defaultPath: 'filtered-export.xml',
+  });
+  if (!result.canceled && result.filePath) {
+    getWorker().postMessage({ type: 'exportXml', queryText, mode, savePath: result.filePath });
+  }
+});

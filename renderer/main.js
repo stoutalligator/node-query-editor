@@ -128,6 +128,7 @@
   // ── State ─────────────────────────────────────────────────────────────────
   let fileLoaded = false;
   let lastResult = null;
+  let lastQueryText = '';
 
   // ── Worker messages ───────────────────────────────────────────────────────
   window.api.onWorkerMessage((msg) => {
@@ -152,6 +153,13 @@
         break;
       case 'queryError':
         showError(msg.error.message);
+        setStatus('');
+        break;
+      case 'xmlExportDone':
+        setStatus('XML exported');
+        break;
+      case 'xmlExportError':
+        showError(msg.message);
         setStatus('');
         break;
     }
@@ -191,6 +199,7 @@
     clearError();
     setStatus('Running…');
     setBadge('');
+    lastQueryText = query;
     const limitVal = parseInt(document.getElementById('run-limit').value, 10);
     await window.api.runQuery(query, limitVal > 0 ? limitVal : null);
   }
@@ -212,6 +221,11 @@
 
     document.getElementById('copy-csv-btn').style.display = '';
     document.getElementById('export-csv-btn').style.display = '';
+
+    // Show XML export only for EXTRACT queries (not CTEs / WITH)
+    const isExtract = lastQueryText.trimStart().toUpperCase().startsWith('EXTRACT');
+    document.getElementById('xml-export-wrap').style.display = isExtract ? '' : 'none';
+
     setStatus('');
   }
 
@@ -222,6 +236,12 @@
 
   document.getElementById('export-csv-btn').addEventListener('click', () => {
     if (lastResult) window.api.exportCsv(buildCsv(lastResult));
+  });
+
+  document.getElementById('export-xml-btn').addEventListener('click', () => {
+    if (!lastQueryText) return;
+    const mode = document.getElementById('xml-mode').value;
+    window.api.exportXml(lastQueryText, mode);
   });
 
   function buildCsv(result) {

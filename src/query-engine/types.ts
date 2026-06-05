@@ -100,13 +100,18 @@ export interface QueryError {
 
 // ── Worker message types ──────────────────────────────────────────────────────
 
+export type XmlFilterMode = 'keep' | 'exclude';
+
 export type WorkerInMessage =
   | { type: 'loadFile'; filePath: string }
-  | { type: 'runQuery'; queryText: string; limit: number | null };
+  | { type: 'runQuery'; queryText: string; limit: number | null }
+  | { type: 'exportXml'; queryText: string; mode: XmlFilterMode; savePath: string };
 
 export type WorkerOutMessage =
   | { type: 'fileLoaded'; filePath: string; sizeBytes: number }
   | { type: 'fileError'; message: string }
   | { type: 'queryResult'; result: QueryResult }
   | { type: 'queryError'; error: QueryError }
-  | { type: 'progress'; message: string };
+  | { type: 'progress'; message: string }
+  | { type: 'xmlExportDone'; savePath: string }
+  | { type: 'xmlExportError'; message: string };
