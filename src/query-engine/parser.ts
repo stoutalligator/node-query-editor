@@ -350,7 +350,8 @@ function parseCte(ts: TokenStream): CteQuery {
   while (!ts.eof() && !ts.peekKw('FROM')) {
     const parts: string[] = [];
     while (!ts.eof() && ts.peek().kind !== 'COMMA' && !ts.peekKw('FROM') && !ts.peekKw('AS')) {
-      parts.push(ts.next().value);
+      const tok = ts.next();
+      parts.push((tok.kind === 'KW' && parts.length > 0 ? ' ' : '') + tok.value);
     }
     let as: string | null = null;
     if (ts.peekKw('AS')) { ts.next(); as = ts.expectIdent(); }

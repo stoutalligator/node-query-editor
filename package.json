@@ -1,6 +1,6 @@
 {
   "name": "node-query-editor",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "NXQL query editor for large XML files",
   "main": "dist/main.js",
   "bin": {
