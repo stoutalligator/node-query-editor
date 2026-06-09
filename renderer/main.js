@@ -234,8 +234,16 @@
     if (lastResult) window.api.copyToClipboard(buildCsv(lastResult));
   });
 
-  document.getElementById('export-csv-btn').addEventListener('click', () => {
-    if (lastResult) window.api.exportCsv(buildCsv(lastResult));
+  document.getElementById('export-csv-btn').addEventListener('click', async () => {
+    if (!lastResult) return;
+    setStatus('Exporting…');
+    const { saved } = await window.api.exportCsv(buildCsv(lastResult));
+    if (saved) {
+      setStatus('CSV saved', false, true);
+      setTimeout(() => setStatus(''), 3000);
+    } else {
+      setStatus('');
+    }
   });
 
   document.getElementById('export-xml-btn').addEventListener('click', () => {
@@ -386,10 +394,10 @@
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-  function setStatus(text, isError = false) {
+  function setStatus(text, isError = false, isSuccess = false) {
     const el = document.getElementById('file-status');
     el.textContent = text;
-    el.style.color = isError ? 'var(--error)' : 'var(--text-dim)';
+    el.style.color = isError ? 'var(--error)' : isSuccess ? 'var(--success)' : 'var(--text-dim)';
   }
 
   function setBadge(text) {

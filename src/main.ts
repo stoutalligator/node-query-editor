@@ -161,7 +161,7 @@ ipcMain.handle('delete-query', (_event, id: string) => {
 });
 
 ipcMain.handle('export-csv', async (_event, csvText: string) => {
-  if (!mainWindow) return;
+  if (!mainWindow) return { saved: false };
   const result = await dialog.showSaveDialog(mainWindow, {
     title: 'Export CSV',
     filters: [{ name: 'CSV', extensions: ['csv'] }],
@@ -169,7 +169,9 @@ ipcMain.handle('export-csv', async (_event, csvText: string) => {
   });
   if (!result.canceled && result.filePath) {
     fs.writeFileSync(result.filePath, csvText, 'utf8');
+    return { saved: true };
   }
+  return { saved: false };
 });
 
 ipcMain.handle('export-xml', async (_event, queryText: string, mode: 'keep' | 'exclude') => {

@@ -303,7 +303,11 @@ function runCte(q: CteQuery, limitOverride: number | null): QueryResult {
     const collectExprs = final.columns
       .map(c => c.expr)
       .filter(e => /^COLLECT\((.+)\)$/.test(e))
-      .map(e => ({ full: e, inner: e.match(/^COLLECT\((.+)\)$/)![1] }));
+      .map(e => {
+        const inner = e.match(/^COLLECT\((.+)\)$/)![1];
+        const dirMatch = inner.match(/^(.+?)\s+(ASC|DESC)$/i);
+        return { full: e, col: dirMatch ? dirMatch[1] : inner, dir: dirMatch ? dirMatch[2].toUpperCase() as 'ASC' | 'DESC' : null };
+      });
 
     const groups = new Map<string, { row: ResultRow; count: number; collected: Map<string, string[]> }>();
     for (const row of rows) {
@@ -314,7 +318,7 @@ function runCte(q: CteQuery, limitOverride: number | null): QueryResult {
       const g = groups.get(key)!;
       g.count++;
       for (const ce of collectExprs) {
-        const val = resolveColExpr(ce.inner, row);
+        const val = resolveColExpr(ce.col, row);
         if (val !== '') g.collected.get(ce.full)!.push(val);
       }
     }
@@ -322,7 +326,17 @@ function runCte(q: CteQuery, limitOverride: number | null): QueryResult {
     for (const { row, count, collected } of groups.values()) {
       if (final.having && !applyHaving(count, final.having)) continue;
       row['__count__'] = String(count);
-      for (const [expr, vals] of collected) row[`__collect__${expr}`] = vals.join(', ');
+      for (const [expr, vals] of collected) {
+        const ce = collectExprs.find(c => c.full === expr)!;
+        let sorted = vals;
+        if (ce.dir) {
+          const allNumeric = vals.every(v => !isNaN(Number(v)));
+          sorted = allNumeric
+            ? [...vals].sort((a, b) => ce.dir === 'ASC' ? Number(a) - Number(b) : Number(b) - Number(a))
+            : [...vals].sort((a, b) => ce.dir === 'ASC' ? a.localeCompare(b) : b.localeCompare(a));
+        }
+        row[`__collect__${expr}`] = sorted.join(', ');
+      }
       rows.push(row);
     }
   }
