@@ -23,7 +23,7 @@ type TokKind =
 const KEYWORDS = new Set([
   'EXTRACT','ROOT','INTO','WHERE','SELECT','AS','WITH','FROM','JOIN','LEFT',
   'INNER','ON','AND','IN','NOT','XPATH','LIMIT','ORDER','BY','ASC','DESC','RETURN','DIR',
-  'GROUP','HAVING','COUNT',
+  'GROUP','HAVING','COUNT','COLLECT',
 ]);
 
 interface Token { kind: TokKind; value: string; pos: number; }

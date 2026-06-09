@@ -111,6 +111,134 @@ Click **Save** in the editor header to name and save the current query. Click **
 
 ---
 
+## CLI Usage
+
+The query engine can be used headlessly from the command line or called programmatically from another application. This is useful for automating queries, running scheduled extracts, or integrating with tools written in other languages.
+
+### Install
+
+**Prerequisites:** Node.js 20+
+
+Clone the repo and build:
+
+```bash
+git clone https://github.com/stoutalligator/node-query-editor.git
+cd node-query-editor
+npm install
+npm run compile
+```
+
+To make the `node-extract` command available globally:
+
+```bash
+npm install -g .
+```
+
+Or reference `dist/cli.js` directly using `node dist/cli.js` without installing globally.
+
+---
+
+### How it works
+
+The CLI reads a JSON batch spec from **stdin** and writes results to **stdout** as JSON. You pass either an `xmlFile` (single file) or `xmlDir` (directory of XML files), plus a list of named queries. All queries run against the same loaded source — the XML is parsed once regardless of how many queries you run.
+
+**Batch spec format:**
+
+```json
+{
+  "xmlFile": "C:/data/prices.xml",
+  "queries": [
+    { "name": "items",  "query": "EXTRACT Item ROOT /PriceList FROM '{xmlFile}' SELECT @id, @price" },
+    { "name": "promos", "query": "EXTRACT Promo ROOT /Promos FROM '{xmlFile}' SELECT @id, @active" }
+  ]
+}
+```
+
+Use `{xmlFile}` or `{xmlDir}` as placeholders in query strings — the CLI substitutes the actual path before parsing. Provide `xmlFile` **or** `xmlDir`, not both.
+
+**For a directory of XML files** — results are unioned and a `_source` column is added showing which file each row came from:
+
+```json
+{
+  "xmlDir": "C:/data/monthly/",
+  "queries": [
+    { "name": "items", "query": "EXTRACT Item ROOT /PriceList FROM DIR '{xmlDir}' SELECT @id, @price" }
+  ]
+}
+```
+
+**Response format:**
+
+```json
+{
+  "items":  { "columns": ["id", "price"], "rows": [{ "id": "1", "price": "9.99" }], "totalRows": 1, "truncated": false },
+  "promos": { "columns": ["id", "active"], "rows": [...], "totalRows": 42, "truncated": false }
+}
+```
+
+Individual query failures return an `error` key for that result without affecting the rest of the batch:
+
+```json
+{
+  "items":  { "columns": [...], "rows": [...], "totalRows": 10, "truncated": false },
+  "broken": { "error": "Unexpected token at position 12" }
+}
+```
+
+---
+
+### Calling from another application
+
+**Python example** — runs a batch and loads each result into a pandas DataFrame:
+
+```python
+import subprocess, json
+import pandas as pd
+
+spec = {
+    "xmlDir": "C:/data/monthly/",
+    "queries": [
+        {"name": "items",  "query": "EXTRACT Item ROOT /PriceList FROM DIR '{xmlDir}' SELECT @id, @price"},
+        {"name": "promos", "query": "EXTRACT Promo ROOT /Promos FROM DIR '{xmlDir}' SELECT @id, @active"},
+    ]
+}
+
+result = subprocess.run(
+    ["node", "C:/path/to/node-query-editor/dist/cli.js"],
+    input=json.dumps(spec),
+    capture_output=True,
+    text=True
+)
+
+if result.returncode != 0:
+    raise RuntimeError(result.stderr)
+
+results = json.loads(result.stdout)
+
+# Load successful results into DataFrames, skip any that errored
+dfs = {}
+for name, data in results.items():
+    if "error" in data:
+        print(f"Query '{name}' failed: {data['error']}")
+    else:
+        dfs[name] = pd.DataFrame(data["rows"])
+
+# Use like: dfs["items"], dfs["promos"]
+```
+
+If `node-extract` is installed globally (`npm install -g .`), replace the `node dist/cli.js` path with just `"node-extract"`:
+
+```python
+result = subprocess.run(
+    ["node-extract"],
+    input=json.dumps(spec),
+    capture_output=True,
+    text=True
+)
+```
+
+---
+
 ## Building from Source
 
 **Prerequisites:** Node.js 20+

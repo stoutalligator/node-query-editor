@@ -3,6 +3,9 @@
   "version": "1.2.0",
   "description": "NXQL query editor for large XML files",
   "main": "dist/main.js",
+  "bin": {
+    "node-extract": "dist/cli.js"
+  },
   "scripts": {
     "compile": "node esbuild.js",
     "watch": "node esbuild.js --watch",

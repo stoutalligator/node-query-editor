@@ -5,6 +5,7 @@ const targets = [
   { entryPoints: ['src/main.ts'],    outfile: 'dist/main.js',    label: 'main'    },
   { entryPoints: ['src/preload.ts'], outfile: 'dist/preload.js', label: 'preload' },
   { entryPoints: ['src/worker.ts'],  outfile: 'dist/worker.js',  label: 'worker'  },
+  { entryPoints: ['src/cli.ts'],     outfile: 'dist/cli.js',     label: 'cli', banner: { js: '#!/usr/bin/env node' } },
 ];
 
 const baseConfig = {
