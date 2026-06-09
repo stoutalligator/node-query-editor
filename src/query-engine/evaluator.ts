@@ -300,16 +300,29 @@ function runCte(q: CteQuery, limitOverride: number | null): QueryResult {
 
   // GROUP BY + HAVING
   if (final.groupBy && final.groupBy.length > 0) {
-    const groups = new Map<string, { row: ResultRow; count: number }>();
+    const collectExprs = final.columns
+      .map(c => c.expr)
+      .filter(e => /^COLLECT\((.+)\)$/.test(e))
+      .map(e => ({ full: e, inner: e.match(/^COLLECT\((.+)\)$/)![1] }));
+
+    const groups = new Map<string, { row: ResultRow; count: number; collected: Map<string, string[]> }>();
     for (const row of rows) {
       const key = final.groupBy.map(c => resolveColExpr(c, row)).join('\0');
-      if (!groups.has(key)) groups.set(key, { row: { ...row }, count: 0 });
-      groups.get(key)!.count++;
+      if (!groups.has(key)) {
+        groups.set(key, { row: { ...row }, count: 0, collected: new Map(collectExprs.map(ce => [ce.full, []])) });
+      }
+      const g = groups.get(key)!;
+      g.count++;
+      for (const ce of collectExprs) {
+        const val = resolveColExpr(ce.inner, row);
+        if (val !== '') g.collected.get(ce.full)!.push(val);
+      }
     }
     rows = [];
-    for (const { row, count } of groups.values()) {
+    for (const { row, count, collected } of groups.values()) {
       if (final.having && !applyHaving(count, final.having)) continue;
       row['__count__'] = String(count);
+      for (const [expr, vals] of collected) row[`__collect__${expr}`] = vals.join(', ');
       rows.push(row);
     }
   }
@@ -375,6 +388,7 @@ function applyJoin(
 
 function resolveColExpr(expr: string, row: ResultRow): string {
   if (expr === 'COUNT(*)') return row['__count__'] ?? '0';
+  if (/^COLLECT\(/.test(expr)) return row[`__collect__${expr}`] ?? '';
   // expr is "alias.column" or just "column"
   if (row[expr] !== undefined) return row[expr];
   // Try stripping alias prefix
