@@ -14,7 +14,7 @@ const baseConfig = {
   minify: false,
   platform: 'node',
   format: 'cjs',
-  external: ['electron'],
+  external: ['electron', '@databricks/sql', 'pg', 'mssql', 'csv-parse', 'csv-parse/sync', 'xlsx'],
 };
 
 async function main() {

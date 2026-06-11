@@ -43,7 +43,7 @@ NXQL (Node XML Query Language) is a SQL-like language for navigating nested XML 
 | `EXTRACT` | Start a query block |
 | `ROOT //Tag AS alias` | Match all elements named `Tag` anywhere in the document |
 | `INTO alias//Tag AS alias` | Descend into descendants of the previous alias |
-| `WHERE @attr = 'value'` | Filter a step — supports `=` `!=` `<` `>` `>=` `<=` `IN(…)` `NOT IN(…)`, and compound `AND` / `OR` |
+| `WHERE @attr = 'value'` | Filter a step — supports `=` `!=` `<` `>` `>=` `<=` `IN(…)` `NOT IN(…)` `IN (dataset:name)`, and compound `AND` / `OR` |
 | `SELECT alias.@attr` | Select a specific attribute |
 | `SELECT alias.*` | Select all attributes from a step |
 | `LIMIT n` | Cap the number of rows returned |
@@ -129,6 +129,59 @@ HAVING COUNT(*) > 1
 `GROUP BY` groups rows by the listed columns. `HAVING COUNT(*) op n` filters groups — use `> 1` to find duplicates.
 
 See [docs/nxql-language.md](docs/nxql-language.md) for the complete language reference with worked examples.
+
+---
+
+## Data Connection Center
+
+The Data Connection Center lets you connect to external data sources and create named **datasets** — value lists that can be referenced directly inside NXQL `WHERE` clauses using `IN (dataset:name)` syntax. This eliminates the need to hard-code filter lists in your queries.
+
+Click **Data Sources** in the toolbar to open the panel.
+
+### Supported connections
+
+| Type | Notes |
+|---|---|
+| Databricks | Server hostname, HTTP path, personal access token |
+| PostgreSQL | Host, port, database, username, password |
+| SQL Server | Host, port, database, username, password, optional trust server certificate |
+| CSV file | Local `.csv` file — no SQL needed |
+| Excel file | Local `.xlsx` / `.xls` file — no SQL needed |
+
+Credentials are encrypted using the OS keychain (Windows DPAPI) and never stored in plaintext.
+
+### Datasets
+
+A dataset is a named connection + SQL query combination. The query runs against the connection and produces a list of values.
+
+1. Open **Data Sources** → **Connections** tab → **+ New Connection**
+2. Fill in the connection details and click **Test** to verify
+3. Switch to the **Datasets** tab → **+ New Dataset**
+4. Give it a name (e.g. `daw5_gcn`), pick the connection, write the SQL, and specify the column to extract
+
+### Using datasets in queries
+
+Reference a dataset anywhere an `IN` or `NOT IN` value list appears:
+
+```sql
+WHERE @gcn IN (dataset:daw5_gcn)
+WHERE @status NOT IN (dataset:excluded_statuses)
+```
+
+Multiple datasets in one query are resolved in parallel before execution. The editor highlights `dataset:name` references in green and provides autocomplete suggestions when you type `dataset:`.
+
+**Full example:**
+
+```sql
+EXTRACT FROM DIR 'C:/data/claims/'
+  ROOT //ClaimGroupBO AS cg
+  INTO cg//ClaimBO AS c
+    WHERE @dawCode IN ('5', '9')
+       OR (@dawCode NOT IN ('1', '2') AND @channel = 'M' AND @gcn IN (dataset:daw5_gcn))
+  SELECT cg.runId, cg.populationId, c.seq
+```
+
+Datasets are resolved live on every query run — no caching.
 
 ---
 
