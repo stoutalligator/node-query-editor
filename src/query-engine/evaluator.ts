@@ -194,9 +194,12 @@ function getChildren(node: AnyNode): AnyNode[] {
 
 function passesWhere(el: Element, where: WhereClause | null): boolean {
   if (!where) return true;
+  if (where.kind === 'and') return where.clauses.every(c => passesWhere(el, c));
+  if (where.kind === 'or')  return where.clauses.some(c  => passesWhere(el, c));
+
+  // where.kind === 'condition'
   const val = el.attribs[where.attr];
   if (val === undefined) return false;
-
   switch (where.op) {
     case '=':      return val === where.value;
     case '!=':     return val !== where.value;

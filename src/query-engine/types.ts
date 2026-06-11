@@ -2,11 +2,27 @@
 
 export type WhereOp = '=' | '!=' | '>' | '<' | '>=' | '<=' | 'IN' | 'NOT IN';
 
-export interface WhereClause {
+/** A single attribute comparison: @attr OP value */
+export interface WhereLeaf {
+  kind: 'condition';
   attr: string;
   op: WhereOp;
   value: string | string[];
 }
+
+/** AND of two or more clauses (all must pass) */
+export interface WhereAnd {
+  kind: 'and';
+  clauses: WhereClause[];
+}
+
+/** OR of two or more clauses (any must pass) */
+export interface WhereOr {
+  kind: 'or';
+  clauses: WhereClause[];
+}
+
+export type WhereClause = WhereLeaf | WhereAnd | WhereOr;
 
 export interface SelectExpr {
   alias: string;        // which EXTRACT alias (e.g. "rd")
