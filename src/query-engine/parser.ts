@@ -265,11 +265,22 @@ function parseOrExpr(ts: TokenStream): WhereClause {
 }
 
 function parseAndExpr(ts: TokenStream): WhereClause {
-  const clauses: WhereClause[] = [parseAtomicCondition(ts)];
+  const clauses: WhereClause[] = [parsePrimary(ts)];
   while (ts.consumeKw('AND')) {
-    clauses.push(parseAtomicCondition(ts));
+    clauses.push(parsePrimary(ts));
   }
   return clauses.length === 1 ? clauses[0] : { kind: 'and', clauses };
+}
+
+function parsePrimary(ts: TokenStream): WhereClause {
+  if (ts.peek().kind === 'LPAREN') {
+    ts.next(); // consume (
+    const inner = parseOrExpr(ts);
+    if (ts.peek().kind !== 'RPAREN') throw new SyntaxError(`Expected ')' to close WHERE group`);
+    ts.next(); // consume )
+    return inner;
+  }
+  return parseAtomicCondition(ts);
 }
 
 function parseAtomicCondition(ts: TokenStream): WhereLeaf {
