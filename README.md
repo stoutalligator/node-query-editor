@@ -43,7 +43,7 @@ NXQL (Node XML Query Language) is a SQL-like language for navigating nested XML 
 | `EXTRACT` | Start a query block |
 | `ROOT //Tag AS alias` | Match all elements named `Tag` anywhere in the document |
 | `INTO alias//Tag AS alias` | Descend into descendants of the previous alias |
-| `WHERE @attr = 'value'` | Filter a step — supports `=` `!=` `<` `>` `>=` `<=` `IN(…)` `NOT IN(…)` `IN (dataset:name)` |
+| `WHERE @attr = 'value'` | Filter a step — supports `=` `!=` `<` `>` `>=` `<=` `IN(…)` `NOT IN(…)` `IN (dataset:name)`, and compound `AND` / `OR` |
 | `SELECT alias.@attr` | Select a specific attribute |
 | `SELECT alias.*` | Select all attributes from a step |
 | `LIMIT n` | Cap the number of rows returned |
@@ -72,6 +72,33 @@ Pull a value from a side-branch element per row:
 
 ```sql
 alias//PropertyBO WHERE @type = 'Label' RETURN @value AS label
+```
+
+### Compound WHERE (AND / OR)
+
+Conditions can be chained with `AND` and `OR`. Standard SQL precedence applies — `AND` binds tighter than `OR`.
+
+```sql
+-- OR across different attributes
+EXTRACT ROOT //*/RateComponentVectorBO AS rcv
+WHERE @rateComponentType = 'FIRE' OR @rateComponentType = 'WIND'
+SELECT rcv.*
+
+-- AND — all conditions must pass
+EXTRACT ROOT //*/PolicyBO AS p
+WHERE @status = 'Active' AND @type = 'Standard'
+SELECT p.*
+
+-- Mixed — AND is evaluated before OR
+-- Reads as: (@type = 'FIRE' AND @tier = '1') OR @override = 'true'
+EXTRACT ROOT //*/RateComponentVectorBO AS rcv
+WHERE @type = 'FIRE' AND @tier = '1' OR @override = 'true'
+SELECT rcv.*
+
+-- IN / NOT IN compose freely with AND / OR
+EXTRACT ROOT //*/RateDetailBO AS rd
+WHERE @rateType IN ('BASE', 'ADJ') AND @active != 'false'
+SELECT rd.*
 ```
 
 ### CTEs, JOINs, and GROUP BY
