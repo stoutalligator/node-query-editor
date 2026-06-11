@@ -64,6 +64,7 @@
               '@default': 'identifier.upper',
             }
           }],
+          [/dataset:[A-Za-z0-9_-]+/, 'dataset-ref'],
           [/[a-z_]\w*/, 'identifier'],
           [/[\/]+[\w/*[\]@:.-]*/, 'path'],
           [/[=><!]+/, 'operator'],
@@ -84,6 +85,7 @@
         { token: 'comment',          foreground: '6a9955', fontStyle: 'italic' },
         { token: 'identifier.upper', foreground: '4fc1ff' },
         { token: 'operator',         foreground: 'd4d4d4' },
+        { token: 'dataset-ref',      foreground: '4ec994', fontStyle: 'bold' },
       ],
       colors: {
         'editor.background': '#21222c',
@@ -120,6 +122,23 @@
 
     // Ctrl+Enter to run
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, runQuery);
+
+    // dataset: autocomplete
+    monaco.languages.registerCompletionItemProvider('nxql', {
+      triggerCharacters: [':'],
+      provideCompletionItems(model, position) {
+        const textBefore = model.getLineContent(position.lineNumber).substring(0, position.column - 1);
+        if (!textBefore.endsWith('dataset:')) return { suggestions: [] };
+        return {
+          suggestions: dccDatasets.map(ds => ({
+            label: ds.name,
+            kind: monaco.languages.CompletionItemKind.Value,
+            insertText: ds.name,
+            detail: ds.query ? ds.query.slice(0, 80) : '(file dataset)',
+          })),
+        };
+      },
+    });
 
     // Enable run button once editor is ready
     document.getElementById('run-btn').disabled = false;
@@ -379,6 +398,317 @@
     if (e.key === 'Enter')  commitSave();
     if (e.key === 'Escape') document.getElementById('save-name-cancel').click();
   });
+
+  // ── Data Connection Center ────────────────────────────────────────────────
+
+  let dccConnections = [];
+  let dccDatasets    = [];
+  let dccEditingConnId = null;
+  let dccEditingDsId   = null;
+
+  // Load on startup
+  Promise.all([
+    window.api.dccLoadConnections(),
+    window.api.dccLoadDatasets(),
+  ]).then(([conns, datasets]) => {
+    dccConnections = conns || [];
+    dccDatasets    = datasets || [];
+    renderDccConnList();
+    renderDccDsList();
+  });
+
+  // Panel toggle
+  document.getElementById('dcc-btn').addEventListener('click', () => {
+    document.getElementById('dcc-panel').classList.toggle('hidden');
+  });
+  document.getElementById('dcc-panel-close').addEventListener('click', () => {
+    document.getElementById('dcc-panel').classList.add('hidden');
+  });
+
+  // Tab switching
+  document.querySelectorAll('.dcc-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.dcc-tab').forEach(t => t.classList.remove('dcc-tab--active'));
+      tab.classList.add('dcc-tab--active');
+      const target = tab.dataset.tab;
+      document.getElementById('dcc-tab-connections').style.display = target === 'connections' ? '' : 'none';
+      document.getElementById('dcc-tab-datasets').style.display    = target === 'datasets'    ? '' : 'none';
+      hideDccForms();
+    });
+  });
+
+  // ── Rendering ──────────────────────────────────────────────────────────────
+
+  function renderDccConnList() {
+    const list = document.getElementById('dcc-conn-list');
+    if (!dccConnections.length) {
+      list.innerHTML = '<div class="dcc-empty">No connections yet.</div>';
+      return;
+    }
+    list.innerHTML = dccConnections.map(c => `
+      <div class="dcc-item" data-id="${escHtml(c.id)}">
+        <div class="dcc-item-info">
+          <div class="dcc-item-name">${escHtml(c.name)}</div>
+          <div class="dcc-item-meta">${escHtml(c.kind)}${c.host ? ' · ' + escHtml(c.host) : ''}${c.serverHostname ? ' · ' + escHtml(c.serverHostname) : ''}${c.filePath ? ' · ' + escHtml(c.filePath) : ''}</div>
+        </div>
+        <div class="dcc-item-actions">
+          <button class="btn-ghost dcc-conn-edit-btn" style="font-size:11px">Edit</button>
+          <button class="btn-ghost dcc-conn-del-btn" style="font-size:11px">&#x2715;</button>
+        </div>
+      </div>`).join('');
+  }
+
+  function renderDccDsList() {
+    const list = document.getElementById('dcc-ds-list');
+    if (!dccDatasets.length) {
+      list.innerHTML = '<div class="dcc-empty">No datasets yet.<small>Define a connection first, then create a dataset that references it.</small></div>';
+      return;
+    }
+    list.innerHTML = dccDatasets.map(d => {
+      const conn = dccConnections.find(c => c.id === d.connectionId);
+      return `
+        <div class="dcc-item" data-id="${escHtml(d.id)}">
+          <div class="dcc-item-info">
+            <div class="dcc-item-name"><code>dataset:${escHtml(d.name)}</code></div>
+            <div class="dcc-item-meta">${conn ? escHtml(conn.name) : '(deleted connection)'} · ${escHtml((d.query || '').slice(0, 50))}</div>
+          </div>
+          <div class="dcc-item-actions">
+            <button class="btn-ghost dcc-ds-test-btn" style="font-size:11px">Test</button>
+            <button class="btn-ghost dcc-ds-edit-btn" style="font-size:11px">Edit</button>
+            <button class="btn-ghost dcc-ds-del-btn"  style="font-size:11px">&#x2715;</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // ── Connection form ─────────────────────────────────────────────────────────
+
+  function openConnForm(conn) {
+    dccEditingConnId = conn ? conn.id : null;
+    document.getElementById('dcc-conn-form-title').textContent = conn ? 'Edit Connection' : 'New Connection';
+    document.getElementById('dcc-f-name').value     = conn?.name            || '';
+    document.getElementById('dcc-f-kind').value     = conn?.kind            || 'databricks';
+    document.getElementById('dcc-f-host').value     = conn?.host            || conn?.serverHostname || '';
+    document.getElementById('dcc-f-port').value     = conn?.port            || '';
+    document.getElementById('dcc-f-database').value = conn?.database        || '';
+    document.getElementById('dcc-f-httpPath').value = conn?.httpPath        || '';
+    document.getElementById('dcc-f-username').value = conn?.username        || '';
+    document.getElementById('dcc-f-filePath').value = conn?.filePath        || '';
+    document.getElementById('dcc-f-tsc').checked    = conn?.trustServerCertificate || false;
+    // Leave password/token blank on edit — user must re-enter to change
+    document.getElementById('dcc-f-token').value    = '';
+    document.getElementById('dcc-f-password').value = '';
+    document.getElementById('dcc-conn-test-result').textContent = '';
+    document.getElementById('dcc-conn-test-result').className = 'dcc-test-result';
+    updateConnFormFields();
+    document.getElementById('dcc-conn-form').classList.remove('hidden');
+    document.getElementById('dcc-f-name').focus();
+  }
+
+  function updateConnFormFields() {
+    const kind = document.getElementById('dcc-f-kind').value;
+    const isFile = kind === 'csv' || kind === 'excel';
+    const isDatabricks = kind === 'databricks';
+    const isSqlServer  = kind === 'sqlserver';
+    document.getElementById('dcc-db-fields').style.display   = isFile ? 'none' : '';
+    document.getElementById('dcc-file-fields').style.display = isFile ? '' : 'none';
+    document.getElementById('dcc-http-label').style.display  = isDatabricks ? '' : 'none';
+    document.getElementById('dcc-token-label').style.display = isDatabricks ? '' : 'none';
+    document.getElementById('dcc-user-label').style.display  = isDatabricks ? 'none' : '';
+    document.getElementById('dcc-pass-label').style.display  = isDatabricks ? 'none' : '';
+    document.getElementById('dcc-tsc-label').style.display   = isSqlServer  ? '' : 'none';
+    // Databricks uses serverHostname label
+    document.getElementById('dcc-host-label').firstChild.textContent =
+      isDatabricks ? 'Server Hostname' : 'Host';
+    // Hide port for Databricks (uses HTTP path instead)
+    document.getElementById('dcc-port-label').style.display  = isDatabricks ? 'none' : '';
+  }
+
+  function buildConnFromForm() {
+    const kind = document.getElementById('dcc-f-kind').value;
+    const conn = {
+      id:   dccEditingConnId || Date.now().toString(),
+      name: document.getElementById('dcc-f-name').value.trim(),
+      kind,
+    };
+    const hostVal = document.getElementById('dcc-f-host').value.trim();
+    if (kind === 'databricks') {
+      conn.serverHostname = hostVal;
+      conn.httpPath       = document.getElementById('dcc-f-httpPath').value.trim();
+      const tok = document.getElementById('dcc-f-token').value;
+      if (tok) conn.token = tok;
+    } else if (kind === 'csv' || kind === 'excel') {
+      conn.filePath = document.getElementById('dcc-f-filePath').value.trim();
+    } else {
+      conn.host     = hostVal;
+      const portVal = document.getElementById('dcc-f-port').value;
+      if (portVal) conn.port = parseInt(portVal, 10);
+      conn.database = document.getElementById('dcc-f-database').value.trim();
+      conn.username = document.getElementById('dcc-f-username').value.trim();
+      const pw = document.getElementById('dcc-f-password').value;
+      if (pw) conn.password = pw;
+      if (kind === 'sqlserver') {
+        conn.trustServerCertificate = document.getElementById('dcc-f-tsc').checked;
+      }
+    }
+    return conn;
+  }
+
+  document.getElementById('dcc-f-kind').addEventListener('change', updateConnFormFields);
+
+  document.getElementById('dcc-browse-file-btn').addEventListener('click', async () => {
+    const fp = await window.api.browseDataFile();
+    if (fp) document.getElementById('dcc-f-filePath').value = fp;
+  });
+
+  document.getElementById('dcc-conn-test-btn').addEventListener('click', async () => {
+    const conn = buildConnFromForm();
+    const resultEl = document.getElementById('dcc-conn-test-result');
+    resultEl.textContent = 'Testing…';
+    resultEl.className = 'dcc-test-result';
+    const result = await window.api.dccTestConnection(conn);
+    resultEl.textContent = result.ok ? 'Connected successfully' : `Error: ${result.error}`;
+    resultEl.className = 'dcc-test-result ' + (result.ok ? 'dcc-test-result--ok' : 'dcc-test-result--error');
+  });
+
+  document.getElementById('dcc-conn-save-btn').addEventListener('click', async () => {
+    const conn = buildConnFromForm();
+    if (!conn.name) { alert('Connection name is required.'); return; }
+    dccConnections = await window.api.dccSaveConnection(conn);
+    renderDccConnList();
+    populateDsConnDropdown();
+    hideDccForms();
+  });
+
+  document.getElementById('dcc-conn-cancel-btn').addEventListener('click', hideDccForms);
+
+  // Connection list event delegation
+  document.getElementById('dcc-conn-list').addEventListener('click', async (e) => {
+    const item = e.target.closest('.dcc-item');
+    if (!item) return;
+    const id = item.dataset.id;
+    if (e.target.classList.contains('dcc-conn-edit-btn')) {
+      openConnForm(dccConnections.find(c => c.id === id));
+    } else if (e.target.classList.contains('dcc-conn-del-btn')) {
+      const result = await window.api.dccDeleteConnection(id);
+      dccConnections = result.connections || [];
+      dccDatasets    = result.datasets    || [];
+      renderDccConnList();
+      renderDccDsList();
+      populateDsConnDropdown();
+    }
+  });
+
+  // ── Dataset form ────────────────────────────────────────────────────────────
+
+  document.getElementById('dcc-add-conn-btn').addEventListener('click', () => {
+    hideDccForms();
+    openConnForm(null);
+  });
+
+  document.getElementById('dcc-add-ds-btn').addEventListener('click', () => {
+    hideDccForms();
+    openDsForm(null);
+  });
+
+  function populateDsConnDropdown() {
+    const sel = document.getElementById('dcc-ds-conn');
+    sel.innerHTML = dccConnections.map(c =>
+      `<option value="${escHtml(c.id)}">${escHtml(c.name)} (${escHtml(c.kind)})</option>`
+    ).join('');
+  }
+
+  function openDsForm(ds) {
+    dccEditingDsId = ds ? ds.id : null;
+    populateDsConnDropdown();
+    document.getElementById('dcc-ds-form-title').textContent = ds ? 'Edit Dataset' : 'New Dataset';
+    document.getElementById('dcc-ds-name').value     = ds?.name        || '';
+    document.getElementById('dcc-ds-conn').value     = ds?.connectionId || (dccConnections[0]?.id || '');
+    document.getElementById('dcc-ds-query').value    = ds?.query       || '';
+    document.getElementById('dcc-ds-valuecol').value = ds?.valueColumn || '';
+    document.getElementById('dcc-ds-test-result').textContent = '';
+    document.getElementById('dcc-ds-test-result').className = 'dcc-test-result';
+    document.getElementById('dcc-ds-form').classList.remove('hidden');
+    document.getElementById('dcc-ds-name').focus();
+  }
+
+  document.getElementById('dcc-ds-test-btn').addEventListener('click', async () => {
+    const resultEl = document.getElementById('dcc-ds-test-result');
+    // If editing an existing dataset, test by ID (uses saved connection credentials)
+    // If new, we can't test until saved — show message
+    if (!dccEditingDsId) {
+      resultEl.textContent = 'Save the dataset first, then test it.';
+      resultEl.className = 'dcc-test-result';
+      return;
+    }
+    resultEl.textContent = 'Running…';
+    resultEl.className = 'dcc-test-result';
+    const result = await window.api.dccTestDataset(dccEditingDsId);
+    if (result.ok) {
+      const preview = result.preview && result.preview.length ? result.preview.join(', ') : '(no rows)';
+      resultEl.textContent = `${result.rowCount} value(s): ${preview}…`;
+      resultEl.className = 'dcc-test-result dcc-test-result--ok';
+    } else {
+      resultEl.textContent = `Error: ${result.error}`;
+      resultEl.className = 'dcc-test-result dcc-test-result--error';
+    }
+  });
+
+  document.getElementById('dcc-ds-save-btn').addEventListener('click', async () => {
+    const name = document.getElementById('dcc-ds-name').value.trim();
+    if (!name) { alert('Dataset name is required.'); return; }
+    if (!/^[A-Za-z0-9_-]+$/.test(name)) {
+      alert('Dataset name may only contain letters, numbers, underscores, and hyphens.');
+      return;
+    }
+    const ds = {
+      id:           dccEditingDsId || Date.now().toString(),
+      name,
+      connectionId: document.getElementById('dcc-ds-conn').value,
+      query:        document.getElementById('dcc-ds-query').value.trim(),
+      valueColumn:  document.getElementById('dcc-ds-valuecol').value.trim(),
+    };
+    dccDatasets = await window.api.dccSaveDataset(ds);
+    dccEditingDsId = ds.id;  // so Test button works immediately after save
+    renderDccDsList();
+    hideDccForms();
+  });
+
+  document.getElementById('dcc-ds-cancel-btn').addEventListener('click', hideDccForms);
+
+  // Dataset list event delegation
+  document.getElementById('dcc-ds-list').addEventListener('click', async (e) => {
+    const item = e.target.closest('.dcc-item');
+    if (!item) return;
+    const id = item.dataset.id;
+    if (e.target.classList.contains('dcc-ds-test-btn')) {
+      const testResultEl = item.querySelector('.dcc-item-test-result') ||
+        (() => { const el = document.createElement('div'); el.className = 'dcc-item-test-result'; item.querySelector('.dcc-item-info').appendChild(el); return el; })();
+      testResultEl.textContent = 'Running…';
+      testResultEl.className = 'dcc-item-test-result';
+      const result = await window.api.dccTestDataset(id);
+      if (result.ok) {
+        const preview = result.preview && result.preview.length ? result.preview.join(', ') : '(no rows)';
+        testResultEl.textContent = `${result.rowCount} value(s): ${preview}`;
+        testResultEl.className = 'dcc-item-test-result dcc-item-test-result--ok';
+      } else {
+        testResultEl.textContent = `Error: ${result.error}`;
+        testResultEl.className = 'dcc-item-test-result dcc-item-test-result--error';
+      }
+    } else if (e.target.classList.contains('dcc-ds-edit-btn')) {
+      openDsForm(dccDatasets.find(d => d.id === id));
+    } else if (e.target.classList.contains('dcc-ds-del-btn')) {
+      dccDatasets = await window.api.dccDeleteDataset(id);
+      renderDccDsList();
+    }
+  });
+
+  function hideDccForms() {
+    document.getElementById('dcc-conn-form').classList.add('hidden');
+    document.getElementById('dcc-ds-form').classList.add('hidden');
+    dccEditingConnId = null;
+    dccEditingDsId   = null;
+  }
 
   // ── Auto-update banner ────────────────────────────────────────────────────
   if (window.api.onUpdateDownloaded) {

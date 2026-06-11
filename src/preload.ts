@@ -17,4 +17,14 @@ contextBridge.exposeInMainWorld('api', {
   loadQueries:    ()                          => ipcRenderer.invoke('load-queries'),
   saveQuery:      (name: string, q: string)   => ipcRenderer.invoke('save-query', name, q),
   deleteQuery:    (id: string)                => ipcRenderer.invoke('delete-query', id),
+  // Data Connection Center
+  browseDataFile:      ()             => ipcRenderer.invoke('browse-data-file'),
+  dccLoadConnections:  ()             => ipcRenderer.invoke('dcc-load-connections'),
+  dccSaveConnection:   (conn: any)    => ipcRenderer.invoke('dcc-save-connection', conn),
+  dccDeleteConnection: (id: string)   => ipcRenderer.invoke('dcc-delete-connection', id),
+  dccTestConnection:   (conn: any)    => ipcRenderer.invoke('dcc-test-connection', conn),
+  dccLoadDatasets:     ()             => ipcRenderer.invoke('dcc-load-datasets'),
+  dccSaveDataset:      (ds: any)      => ipcRenderer.invoke('dcc-save-dataset', ds),
+  dccDeleteDataset:    (id: string)   => ipcRenderer.invoke('dcc-delete-dataset', id),
+  dccTestDataset:      (id: string)   => ipcRenderer.invoke('dcc-test-dataset', id),
 });

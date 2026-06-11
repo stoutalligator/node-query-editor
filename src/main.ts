@@ -3,6 +3,11 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { Worker } from 'worker_threads';
 import { autoUpdater } from 'electron-updater';
+import { readConnections, writeConnections, readDatasets, writeDatasets } from './data-connections/store';
+import { encryptConnection, decryptConnection } from './data-connections/credentials';
+import { createDriver } from './data-connections/factory';
+import { resolveDatasets } from './data-connections/resolver';
+import type { Connection, Dataset } from './data-connections/types';
 
 let mainWindow: BrowserWindow | null = null;
 let worker: Worker | null = null;
@@ -135,8 +140,20 @@ ipcMain.handle('load-file', async (_event, filePath: string) => {
   }
 });
 
-ipcMain.handle('run-query', (_event, queryText: string, limit: number | null) => {
-  getWorker().postMessage({ type: 'runQuery', queryText, limit });
+ipcMain.handle('run-query', async (_event, queryText: string, limit: number | null) => {
+  let resolved: string;
+  try {
+    resolved = await resolveDatasets(queryText);
+  } catch (err: any) {
+    if (mainWindow) {
+      mainWindow.webContents.send('worker-message', {
+        type: 'queryError',
+        error: { message: `Dataset resolution failed: ${err.message}` },
+      });
+    }
+    return;
+  }
+  getWorker().postMessage({ type: 'runQuery', queryText: resolved, limit });
 });
 
 // ── IPC: clipboard + CSV export ───────────────────────────────────────────────
@@ -183,5 +200,84 @@ ipcMain.handle('export-xml', async (_event, queryText: string, mode: 'keep' | 'e
   });
   if (!result.canceled && result.filePath) {
     getWorker().postMessage({ type: 'exportXml', queryText, mode, savePath: result.filePath });
+  }
+});
+
+// ── IPC: Data Connection Center ───────────────────────────────────────────────
+
+ipcMain.handle('browse-data-file', async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select CSV or Excel file',
+    filters: [
+      { name: 'CSV / Excel', extensions: ['csv', 'xlsx', 'xls'] },
+      { name: 'All files', extensions: ['*'] },
+    ],
+    properties: ['openFile'],
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle('dcc-load-connections', () => readConnections());
+
+ipcMain.handle('dcc-save-connection', (_e, conn: Connection) => {
+  const list = readConnections();
+  const encrypted = encryptConnection(conn);
+  const idx = list.findIndex(c => c.id === conn.id);
+  if (idx >= 0) {
+    // On edit, preserve existing encrypted credential if incoming field is empty
+    const existing = list[idx];
+    if (!conn.token && existing.token) encrypted.token = existing.token;
+    if (!conn.password && existing.password) encrypted.password = existing.password;
+    list[idx] = encrypted;
+  } else {
+    list.unshift(encrypted);
+  }
+  writeConnections(list);
+  return readConnections();
+});
+
+ipcMain.handle('dcc-delete-connection', (_e, id: string) => {
+  writeConnections(readConnections().filter(c => c.id !== id));
+  // Cascade: remove datasets referencing this connection
+  writeDatasets(readDatasets().filter(d => d.connectionId !== id));
+  return { connections: readConnections(), datasets: readDatasets() };
+});
+
+ipcMain.handle('dcc-test-connection', async (_e, conn: Connection) => {
+  try {
+    const driver = createDriver(conn.kind);
+    return await driver.ping(conn as import('./data-connections/types').ResolvedConnection);
+  } catch (err: any) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('dcc-load-datasets', () => readDatasets());
+
+ipcMain.handle('dcc-save-dataset', (_e, dataset: Dataset) => {
+  const list = readDatasets();
+  const idx = list.findIndex(d => d.id === dataset.id);
+  if (idx >= 0) list[idx] = dataset;
+  else list.unshift(dataset);
+  writeDatasets(list);
+  return readDatasets();
+});
+
+ipcMain.handle('dcc-delete-dataset', (_e, id: string) => {
+  writeDatasets(readDatasets().filter(d => d.id !== id));
+  return readDatasets();
+});
+
+ipcMain.handle('dcc-test-dataset', async (_e, datasetId: string) => {
+  const dataset = readDatasets().find(d => d.id === datasetId);
+  if (!dataset) return { ok: false, error: 'Dataset not found' };
+  const conn = readConnections().find(c => c.id === dataset.connectionId);
+  if (!conn) return { ok: false, error: 'Connection not found (may have been deleted)' };
+  try {
+    const driver = createDriver(conn.kind);
+    return await driver.test(decryptConnection(conn), dataset);
+  } catch (err: any) {
+    return { ok: false, error: err.message };
   }
 });

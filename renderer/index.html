@@ -42,6 +42,8 @@
         <button id="export-xml-btn" class="btn-secondary">Export XML</button>
       </div>
       <span id="result-badge"></span>
+      <div class="toolbar-sep"></div>
+      <button id="dcc-btn" class="btn-secondary">Data Sources</button>
     </div>
 
     <!-- ── Saved queries panel (floats over editor) ── -->
@@ -52,6 +54,122 @@
       </div>
       <div id="saved-list">
         <div class="saved-empty">No saved queries yet.</div>
+      </div>
+    </div>
+
+    <!-- ── Data Connection Center panel (floats over editor) ── -->
+    <div id="dcc-panel" class="hidden">
+      <div class="dcc-panel-header">
+        <span class="dcc-panel-title">Data Connection Center</span>
+        <button id="dcc-panel-close" class="btn-ghost">&#x2715;</button>
+      </div>
+
+      <!-- Tab strip -->
+      <div class="dcc-tabs">
+        <button class="dcc-tab dcc-tab--active" data-tab="connections">Connections</button>
+        <button class="dcc-tab" data-tab="datasets">Datasets</button>
+      </div>
+
+      <!-- Connections tab -->
+      <div id="dcc-tab-connections" class="dcc-tab-body">
+        <div class="dcc-toolbar">
+          <button id="dcc-add-conn-btn" class="btn-ghost btn-ghost--green">+ New Connection</button>
+        </div>
+        <div id="dcc-conn-list">
+          <div class="dcc-empty">No connections yet.</div>
+        </div>
+        <!-- Inline connection form -->
+        <div id="dcc-conn-form" class="dcc-form hidden">
+          <div class="dcc-form-title" id="dcc-conn-form-title">New Connection</div>
+          <label>Name <input id="dcc-f-name" type="text" placeholder="My Databricks Prod" /></label>
+          <label>Type
+            <select id="dcc-f-kind">
+              <option value="databricks">Databricks</option>
+              <option value="postgres">PostgreSQL</option>
+              <option value="sqlserver">SQL Server</option>
+              <option value="csv">CSV File</option>
+              <option value="excel">Excel File</option>
+            </select>
+          </label>
+          <!-- DB fields (hidden for csv/excel) -->
+          <div id="dcc-db-fields">
+            <label id="dcc-host-label">Host / Server Hostname
+              <input id="dcc-f-host" type="text" placeholder="adb-123.azuredatabricks.net" />
+            </label>
+            <label id="dcc-port-label">Port (leave blank for default)
+              <input id="dcc-f-port" type="number" placeholder="" />
+            </label>
+            <label id="dcc-db-label">Database / Catalog
+              <input id="dcc-f-database" type="text" placeholder="hive_metastore" />
+            </label>
+            <label id="dcc-http-label">HTTP Path
+              <input id="dcc-f-httpPath" type="text" placeholder="/sql/1.0/warehouses/abc123" />
+            </label>
+            <label id="dcc-token-label">Access Token
+              <input id="dcc-f-token" type="password" placeholder="dapi…" autocomplete="new-password" />
+            </label>
+            <label id="dcc-user-label">Username
+              <input id="dcc-f-username" type="text" placeholder="username" />
+            </label>
+            <label id="dcc-pass-label">Password
+              <input id="dcc-f-password" type="password" placeholder="Leave blank to keep existing" autocomplete="new-password" />
+            </label>
+            <label id="dcc-tsc-label" class="dcc-checkbox-label">
+              <input id="dcc-f-tsc" type="checkbox" /> Trust Server Certificate
+            </label>
+          </div>
+          <!-- File fields (shown for csv/excel) -->
+          <div id="dcc-file-fields" class="hidden">
+            <label>File Path
+              <div class="dcc-file-row">
+                <input id="dcc-f-filePath" type="text" placeholder="C:\data\file.csv" />
+                <button id="dcc-browse-file-btn" class="btn-secondary">Browse…</button>
+              </div>
+            </label>
+          </div>
+          <div class="dcc-form-actions">
+            <button id="dcc-conn-test-btn" class="btn-secondary">Test</button>
+            <span id="dcc-conn-test-result" class="dcc-test-result"></span>
+            <div class="dcc-form-actions-right">
+              <button id="dcc-conn-save-btn" class="btn-ghost btn-ghost--green">Save</button>
+              <button id="dcc-conn-cancel-btn" class="btn-ghost">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Datasets tab -->
+      <div id="dcc-tab-datasets" class="dcc-tab-body" style="display:none">
+        <div class="dcc-toolbar">
+          <button id="dcc-add-ds-btn" class="btn-ghost btn-ghost--green">+ New Dataset</button>
+        </div>
+        <div id="dcc-ds-list">
+          <div class="dcc-empty">No datasets yet.</div>
+        </div>
+        <!-- Inline dataset form -->
+        <div id="dcc-ds-form" class="dcc-form hidden">
+          <div class="dcc-form-title" id="dcc-ds-form-title">New Dataset</div>
+          <label>Name <small>(used as <code>dataset:name</code> in NXQL)</small>
+            <input id="dcc-ds-name" type="text" placeholder="west_skus" />
+          </label>
+          <label>Connection
+            <select id="dcc-ds-conn"></select>
+          </label>
+          <label>SQL Query <small>(first column used if Value Column is blank)</small>
+            <textarea id="dcc-ds-query" rows="3" placeholder="SELECT sku FROM active_skus WHERE region = 'WEST'"></textarea>
+          </label>
+          <label>Value Column <small>(column name to extract)</small>
+            <input id="dcc-ds-valuecol" type="text" placeholder="sku" />
+          </label>
+          <div class="dcc-form-actions">
+            <button id="dcc-ds-test-btn" class="btn-secondary">Test</button>
+            <span id="dcc-ds-test-result" class="dcc-test-result"></span>
+            <div class="dcc-form-actions-right">
+              <button id="dcc-ds-save-btn" class="btn-ghost btn-ghost--green">Save</button>
+              <button id="dcc-ds-cancel-btn" class="btn-ghost">Cancel</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
