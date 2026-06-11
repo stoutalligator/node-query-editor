@@ -1,6 +1,6 @@
 import type {
   ParsedQuery, ExtractQuery, CteQuery, XPathQuery,
-  ExtractStep, SelectExpr, LookupExpr, WhereClause, WhereOp,
+  ExtractStep, SelectExpr, LookupExpr, WhereClause, WhereLeaf, WhereOp,
   CteDefinition, JoinClause, JoinType, ExtractSource,
 } from './types';
 
@@ -22,7 +22,7 @@ type TokKind =
 
 const KEYWORDS = new Set([
   'EXTRACT','ROOT','INTO','WHERE','SELECT','AS','WITH','FROM','JOIN','LEFT',
-  'INNER','ON','AND','IN','NOT','XPATH','LIMIT','ORDER','BY','ASC','DESC','RETURN','DIR',
+  'INNER','ON','AND','OR','IN','NOT','XPATH','LIMIT','ORDER','BY','ASC','DESC','RETURN','DIR',
   'GROUP','HAVING','COUNT','COLLECT',
 ]);
 
@@ -243,22 +243,57 @@ function parseExtract(ts: TokenStream): ExtractQuery {
   return { kind: 'extract', source, steps, select, limit };
 }
 
+// WHERE clause parser — standard SQL precedence: OR < AND < atom
+// Supports:
+//   WHERE @a = 'x'
+//   WHERE @a = 'x' AND @b = 'y'
+//   WHERE @a = 'x' OR @b = 'y'
+//   WHERE @a = 'x' AND @b = 'y' OR @c = 'z'   (AND binds tighter)
+//   WHERE @a IN ('x','y') OR @b != 'z'
+
 function parseWhere(ts: TokenStream): WhereClause {
   ts.expectKw('WHERE');
+  return parseOrExpr(ts);
+}
+
+function parseOrExpr(ts: TokenStream): WhereClause {
+  const clauses: WhereClause[] = [parseAndExpr(ts)];
+  while (ts.consumeKw('OR')) {
+    clauses.push(parseAndExpr(ts));
+  }
+  return clauses.length === 1 ? clauses[0] : { kind: 'or', clauses };
+}
+
+function parseAndExpr(ts: TokenStream): WhereClause {
+  const clauses: WhereClause[] = [parseAtomicCondition(ts)];
+  while (ts.consumeKw('AND')) {
+    clauses.push(parseAtomicCondition(ts));
+  }
+  return clauses.length === 1 ? clauses[0] : { kind: 'and', clauses };
+}
+
+function parseAtomicCondition(ts: TokenStream): WhereLeaf {
   const t = ts.next();
-  if (t.kind !== 'ATTR') throw new SyntaxError(`Expected @attribute in WHERE, got '${t.value}'`);
+  if (t.kind !== 'ATTR') throw new SyntaxError(`Expected @attribute in WHERE condition, got '${t.value}'`);
   const attr = t.value.slice(1); // strip @
 
   const opTok = ts.next();
   let op: WhereOp;
   let value: string | string[];
 
-  if (ts.peekKw('NOT')) {
-    ts.next(); ts.expectKw('IN');
+  if (opTok.kind === 'KW' && opTok.value.toUpperCase() === 'NOT') {
+    // @attr NOT IN (...)
+    ts.expectKw('IN');
     op = 'NOT IN';
     value = parseInList(ts);
   } else if (opTok.kind === 'KW' && opTok.value.toUpperCase() === 'IN') {
+    // @attr IN (...)
     op = 'IN';
+    value = parseInList(ts);
+  } else if (ts.peekKw('NOT')) {
+    // legacy: @attr = NOT IN (...)
+    ts.next(); ts.expectKw('IN');
+    op = 'NOT IN';
     value = parseInList(ts);
   } else {
     op = opTok.value as WhereOp;
@@ -266,7 +301,7 @@ function parseWhere(ts: TokenStream): WhereClause {
     value = valTok.value;
   }
 
-  return { attr, op, value };
+  return { kind: 'condition', attr, op, value };
 }
 
 function parseInList(ts: TokenStream): string[] {
