@@ -156,7 +156,9 @@ function matchPath(path: string, context: AnyNode): Element[] {
   }
 
   // Relative path: tag/tag2
-  const parts = normalized.split('/').filter(Boolean);
+  // Strip leading alias/ prefix (single-slash) — context is already resolved to that alias node
+  const relative = normalized.replace(/^[a-zA-Z_]\w*\//, '');
+  const parts = relative.split('/').filter(Boolean);
   let current: AnyNode[] = [context];
   for (const part of parts) {
     const next: AnyNode[] = [];
