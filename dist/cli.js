@@ -169,7 +169,7 @@ function tokenize(src) {
       let word = "";
       while (i < src.length && /[\w]/.test(src[i])) word += src[i++];
       const upper = word.toUpperCase();
-      if (src[i] === "/" && src[i + 1] === "/") {
+      if (src[i] === "/") {
         let path3 = word;
         while (i < src.length && !/[\s,()]/.test(src[i])) path3 += src[i++];
         tokens.push({ kind: "PATH", value: path3, pos: start });
@@ -2747,7 +2747,8 @@ function matchPath(path3, context) {
     const realTag = tagName === "*" ? null : tagName.replace(/^\*\//, "");
     return findDescendants(context, realTag);
   }
-  const parts = normalized.split("/").filter(Boolean);
+  const relative = normalized.replace(/^[a-zA-Z_]\w*\//, "");
+  const parts = relative.split("/").filter(Boolean);
   let current = [context];
   for (const part of parts) {
     const next = [];
