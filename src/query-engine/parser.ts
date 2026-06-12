@@ -107,8 +107,8 @@ function tokenize(src: string): Token[] {
       let word = '';
       while (i < src.length && /[\w]/.test(src[i])) word += src[i++];
       const upper = word.toUpperCase();
-      // Check if followed by // making it a path like "alias//..."
-      if (src[i] === '/' && src[i+1] === '/') {
+      // Check if followed by / or // making it a path like "alias/tag" or "alias//tag"
+      if (src[i] === '/') {
         let path = word;
         while (i < src.length && !/[\s,()]/.test(src[i])) path += src[i++];
         tokens.push({ kind: 'PATH', value: path, pos: start });
